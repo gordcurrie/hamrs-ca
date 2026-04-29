@@ -36,6 +36,10 @@ fn load_config() -> HamrsConfig {
         .join("hamrs-ca")
         .join("config.toml");
 
+    load_config_from(&path)
+}
+
+fn load_config_from(path: &std::path::Path) -> HamrsConfig {
     std::fs::read_to_string(path)
         .ok()
         .and_then(|s| toml::from_str(&s).ok())
@@ -285,13 +289,17 @@ fn ensure_config_exists() {
     let Some(config_dir) = dirs::config_local_dir() else {
         return;
     };
-    let dir = config_dir.join("hamrs-ca");
-    let path = dir.join("config.toml");
+    ensure_config_at(&config_dir.join("hamrs-ca").join("config.toml"));
+}
+
+fn ensure_config_at(path: &std::path::Path) {
     if path.exists() {
         return;
     }
-    if std::fs::create_dir_all(&dir).is_ok() {
-        let _ = std::fs::write(&path, EXAMPLE_CONFIG);
+    if let Some(dir) = path.parent() {
+        if std::fs::create_dir_all(dir).is_ok() {
+            let _ = std::fs::write(path, EXAMPLE_CONFIG);
+        }
     }
 }
 
@@ -302,4 +310,75 @@ fn load_system_prompt() -> String {
         .join("system_prompt.md");
 
     std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_defaults_to_none_when_file_missing() {
+        let config = load_config_from(std::path::Path::new("/nonexistent/config.toml"));
+        assert!(config.anthropic_api_key.is_none());
+        assert!(config.model.is_none());
+        assert!(config.ollama_host.is_none());
+        assert!(config.ollama_model.is_none());
+    }
+
+    #[test]
+    fn config_parses_anthropic_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "anthropic_api_key = \"sk-ant-test\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.anthropic_api_key.as_deref(), Some("sk-ant-test"));
+        assert!(config.model.is_none());
+    }
+
+    #[test]
+    fn config_parses_all_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "anthropic_api_key = \"sk-ant-x\"\nmodel = \"claude-opus-4-7\"\nollama_host = \"http://10.0.0.1:11434\"\nollama_model = \"gemma4\"\n",
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.anthropic_api_key.as_deref(), Some("sk-ant-x"));
+        assert_eq!(config.model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(config.ollama_host.as_deref(), Some("http://10.0.0.1:11434"));
+        assert_eq!(config.ollama_model.as_deref(), Some("gemma4"));
+    }
+
+    #[test]
+    fn config_ignores_unknown_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "unknown_key = \"value\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert!(config.anthropic_api_key.is_none());
+    }
+
+    #[test]
+    fn ensure_config_creates_file_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subdir").join("config.toml");
+        assert!(!path.exists());
+        ensure_config_at(&path);
+        assert!(path.exists());
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("anthropic_api_key"));
+        assert!(contents.contains("ollama_host"));
+    }
+
+    #[test]
+    fn ensure_config_does_not_overwrite_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "anthropic_api_key = \"sk-ant-keep\"\n").unwrap();
+        ensure_config_at(&path);
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, "anthropic_api_key = \"sk-ant-keep\"\n");
+    }
 }

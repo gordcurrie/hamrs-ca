@@ -305,7 +305,7 @@ mod tests {
         db.mark_concept_visited("B-002-001").unwrap();
         db.reset_concept_section(1).unwrap();
         let visited = db.get_visited_concepts().unwrap();
-        assert!(visited.is_empty() || !visited.iter().any(|k| k.starts_with("B-001-")));
+        assert!(!visited.iter().any(|k| k.starts_with("B-001-")));
         assert!(visited.contains("B-002-001"));
     }
 }

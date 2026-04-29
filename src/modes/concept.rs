@@ -52,20 +52,17 @@ pub async fn run(bank: &QuestionBank, db: &Db) -> Result<()> {
 }
 
 fn section_progress(bank: &QuestionBank, section: u8, visited: &HashSet<String>) -> (usize, usize) {
-    let mut total = 0usize;
+    let mut seen = std::collections::BTreeSet::new();
     let mut done = 0usize;
-    let mut current_sub = 0u8;
     for q in bank.by_section(section) {
-        if q.subsection != current_sub {
-            current_sub = q.subsection;
-            total += 1;
-            let key = format!("B-{section:03}-{current_sub:03}");
+        if seen.insert(q.subsection) {
+            let key = format!("B-{section:03}-{:03}", q.subsection);
             if visited.contains(&key) {
                 done += 1;
             }
         }
     }
-    (done, total)
+    (done, seen.len())
 }
 
 fn pick_section(bank: &QuestionBank, visited: &HashSet<String>) -> Result<Option<u8>> {
@@ -190,7 +187,8 @@ fn run_reset_menu(
                 let confirm = read_line()?;
                 if confirm.trim() == "y" || confirm.trim() == "Y" {
                     db.reset_concept_section(section)?;
-                    visited.retain(|k| !k.starts_with(&format!("B-{section:03}-")));
+                    let prefix = format!("B-{section:03}-");
+                    visited.retain(|k| !k.starts_with(&prefix));
                     println!("  Progress reset for {section_name}.");
                 }
                 return Ok(());

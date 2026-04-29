@@ -4,6 +4,8 @@ A Rust CLI study tool for the **Canadian Amateur Radio Basic Qualification** exa
 
 Built for people who want to actually understand the RF engineering — not just memorize answers and forget them. The tool has two distinct modes that reflect the nature of the material: conceptual depth for technical topics, and efficient drilling for regulations and procedures.
 
+![hamrs-ca demo](assets/demo.gif)
+
 ---
 
 ## Features
@@ -26,7 +28,19 @@ Built for people who want to actually understand the RF engineering — not just
 
 ## Installation
 
-**Prerequisites:** Rust toolchain (`rustup.rs`)
+### Prebuilt binary (no Rust required)
+
+Download the latest release for your platform from the [Releases page](https://github.com/gordcurrie/hamrs-ca/releases) and place the `hamrs` binary somewhere on your PATH.
+
+### Install with Cargo
+
+```bash
+cargo install --git https://github.com/gordcurrie/hamrs-ca
+```
+
+Requires the [Rust toolchain](https://rustup.rs). The binary installs to `~/.cargo/bin/hamrs`.
+
+### Build from source
 
 ```bash
 git clone https://github.com/gordcurrie/hamrs-ca
@@ -34,7 +48,9 @@ cd hamrs-ca
 cargo build --release
 ```
 
-The binary is at `target/release/hamrs`. Add it to your PATH or run it directly.
+The binary is at `target/release/hamrs`.
+
+---
 
 The question bank (984 questions from the ISED public-domain database) is compiled into the binary — no data files to manage.
 

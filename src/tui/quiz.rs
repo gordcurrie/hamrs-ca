@@ -65,13 +65,14 @@ impl App {
     }
 
     fn remaining(&self) -> Option<Duration> {
-        self.time_limit.map(|limit| {
-            limit.saturating_sub(self.elapsed())
-        })
+        self.time_limit
+            .map(|limit| limit.saturating_sub(self.elapsed()))
     }
 
     fn is_time_up(&self) -> bool {
-        self.time_limit.map(|l| self.elapsed() >= l).unwrap_or(false)
+        self.time_limit
+            .map(|l| self.elapsed() >= l)
+            .unwrap_or(false)
     }
 
     fn handle_key(&mut self, code: KeyCode, db: &Db, session_id: i64) -> Result<()> {
@@ -234,17 +235,16 @@ fn render_quiz(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &Ap
 
     // Header: progress + timer + section
     let section = q.question.section_name();
-    let progress_text = format!(
-        "Q {}/{}  │  {}",
-        app.current + 1,
-        app.total(),
-        section
-    );
+    let progress_text = format!("Q {}/{}  │  {}", app.current + 1, app.total(), section);
     let (timer_text, timer_color) = match app.remaining() {
         Some(rem) => {
             let mins = rem.as_secs() / 60;
             let secs = rem.as_secs() % 60;
-            let color = if rem.as_secs() < 300 { Color::Red } else { Color::Green };
+            let color = if rem.as_secs() < 300 {
+                Color::Red
+            } else {
+                Color::Green
+            };
             (format!("⏱ {:02}:{:02}", mins, secs), color)
         }
         None => (String::new(), Color::Reset),
@@ -299,8 +299,11 @@ fn render_quiz(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &Ap
     let footer = if let Some(chosen) = app.answered {
         let correct = chosen == q.correct_index;
         if correct {
-            Paragraph::new("  ✓  Correct!  —  Space or Enter for next")
-                .style(Style::default().fg(Color::Green).add_modifier(Modifier::BOLD))
+            Paragraph::new("  ✓  Correct!  —  Space or Enter for next").style(
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )
         } else {
             let correct_label = ['A', 'B', 'C', 'D'][q.correct_index];
             Paragraph::new(format!(
@@ -321,14 +324,18 @@ fn answer_style(app: &App, index: usize) -> Style {
     match app.answered {
         None => {
             if index == app.cursor {
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default()
             }
         }
         Some(chosen) => {
             if index == q.correct_index {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
             } else if index == chosen && chosen != q.correct_index {
                 Style::default().fg(Color::Red)
             } else {
@@ -381,9 +388,15 @@ fn render_score(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &A
         .gauge_style(Style::default().fg(gauge_color))
         .percent(bar_pct)
         .label(format!("{pct}%"));
-    frame.render_widget(gauge, chunks[3].inner(Margin { horizontal: 2, vertical: 1 }));
+    frame.render_widget(
+        gauge,
+        chunks[3].inner(Margin {
+            horizontal: 2,
+            vertical: 1,
+        }),
+    );
 
-    let footer = Paragraph::new("  q / Enter  Quit")
-        .style(Style::default().add_modifier(Modifier::DIM));
+    let footer =
+        Paragraph::new("  q / Enter  Quit").style(Style::default().add_modifier(Modifier::DIM));
     frame.render_widget(footer, chunks[4]);
 }

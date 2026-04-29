@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -44,7 +44,8 @@ impl Db {
     }
 
     fn init_schema(&self) -> Result<()> {
-        self.conn.execute_batch("
+        self.conn.execute_batch(
+            "
             CREATE TABLE IF NOT EXISTS sessions (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 mode        TEXT NOT NULL,
@@ -64,7 +65,8 @@ impl Db {
 
             CREATE INDEX IF NOT EXISTS idx_attempts_question
                 ON attempts(question_id);
-        ")?;
+        ",
+        )?;
         Ok(())
     }
 
@@ -157,8 +159,7 @@ impl Db {
 }
 
 fn db_path() -> Result<PathBuf> {
-    let base = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."));
+    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     Ok(base.join("hamrs-ca").join("progress.db"))
 }
 
@@ -184,7 +185,11 @@ mod tests {
     use super::*;
 
     fn stats(attempts: u32, correct: u32) -> QuestionStats {
-        QuestionStats { question_id: "test".into(), attempts, correct }
+        QuestionStats {
+            question_id: "test".into(),
+            attempts,
+            correct,
+        }
     }
 
     #[test]

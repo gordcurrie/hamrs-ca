@@ -87,8 +87,8 @@ impl ConceptClient {
 
         // Prefer Anthropic if key is present, otherwise fall back to Ollama
         if let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") {
-            let model =
-                std::env::var("HAMRS_MODEL").unwrap_or_else(|_| DEFAULT_ANTHROPIC_MODEL.to_string());
+            let model = std::env::var("HAMRS_MODEL")
+                .unwrap_or_else(|_| DEFAULT_ANTHROPIC_MODEL.to_string());
             return Ok(Self {
                 client: Client::new(),
                 backend: Backend::Anthropic { api_key },
@@ -97,8 +97,7 @@ impl ConceptClient {
             });
         }
 
-        let host =
-            std::env::var("OLLAMA_HOST").unwrap_or_else(|_| DEFAULT_OLLAMA_HOST.to_string());
+        let host = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| DEFAULT_OLLAMA_HOST.to_string());
         let model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| DEFAULT_OLLAMA_MODEL.to_string());
 
@@ -167,9 +166,17 @@ impl ConceptClient {
         };
 
         let url = format!("{host}/api/chat");
-        let resp = self.client.post(&url).json(&body).send().await.map_err(|e| {
-            anyhow!("Could not reach Ollama at {host}: {e}\nIs Ollama running? Try: ollama serve")
-        })?;
+        let resp = self
+            .client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Could not reach Ollama at {host}: {e}\nIs Ollama running? Try: ollama serve"
+                )
+            })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -188,6 +195,5 @@ fn load_system_prompt() -> String {
         .join("hamrs-ca")
         .join("system_prompt.md");
 
-    std::fs::read_to_string(&config_path)
-        .unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+    std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
 }

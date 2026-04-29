@@ -27,7 +27,10 @@ pub fn pick_sections() -> anyhow::Result<Option<Option<Vec<u8>>>> {
             println!("  {}.  {}", i + 1, name);
         }
         println!();
-        print!("  Section (0=all, 1–{}), or q to quit: ", SECTION_NAMES.len());
+        print!(
+            "  Section (0=all, 1–{}), or q to quit: ",
+            SECTION_NAMES.len()
+        );
         io::stdout().flush()?;
 
         let mut line = String::new();
@@ -110,11 +113,7 @@ pub fn build_exam_session(bank: &QuestionBank, db: &Db) -> anyhow::Result<QuizSe
     })
 }
 
-fn weighted_sample(
-    pool: Vec<&Question>,
-    db: &Db,
-    count: usize,
-) -> anyhow::Result<Vec<Question>> {
+fn weighted_sample(pool: Vec<&Question>, db: &Db, count: usize) -> anyhow::Result<Vec<Question>> {
     let ids: Vec<String> = pool.iter().map(|q| q.id.clone()).collect();
     let stats = db.stats_for_questions(&ids)?;
     let weight_map: HashMap<&str, u32> = stats

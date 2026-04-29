@@ -144,9 +144,16 @@ async fn run_topic_session(
         print_exam_questions(&related);
 
         // Seed conversation history so follow-ups have context
-        let initial_prompt = build_initial_prompt(section, subsection, section_name, hint, &related);
-        messages.push(Message { role: "user", content: initial_prompt });
-        messages.push(Message { role: "assistant", content: content.to_string() });
+        let initial_prompt =
+            build_initial_prompt(section, subsection, section_name, hint, &related);
+        messages.push(Message {
+            role: "user",
+            content: initial_prompt,
+        });
+        messages.push(Message {
+            role: "assistant",
+            content: content.to_string(),
+        });
     } else {
         // No pre-generated content — fall back to live LLM
         client = Some(match ConceptClient::new() {
@@ -157,8 +164,12 @@ async fn run_topic_session(
             }
         });
 
-        let initial_prompt = build_initial_prompt(section, subsection, section_name, hint, &related);
-        messages.push(Message { role: "user", content: initial_prompt });
+        let initial_prompt =
+            build_initial_prompt(section, subsection, section_name, hint, &related);
+        messages.push(Message {
+            role: "user",
+            content: initial_prompt,
+        });
 
         println!();
         println!("\x1b[2m  Thinking...\x1b[0m");
@@ -174,7 +185,10 @@ async fn run_topic_session(
         println!();
         print_exam_questions(&related);
 
-        messages.push(Message { role: "assistant", content: response });
+        messages.push(Message {
+            role: "assistant",
+            content: response,
+        });
     }
 
     loop {

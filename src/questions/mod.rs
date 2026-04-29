@@ -52,5 +52,4 @@ impl QuestionBank {
             .iter()
             .filter(move |q| q.section == section && q.subsection == subsection)
     }
-
 }

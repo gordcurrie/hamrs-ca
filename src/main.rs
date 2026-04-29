@@ -52,7 +52,8 @@ async fn main() -> Result<()> {
                     Some(s) => s,
                 }
             };
-            let session = modes::exam::build_practice_session(&bank, &db, sections.as_deref(), count)?;
+            let session =
+                modes::exam::build_practice_session(&bank, &db, sections.as_deref(), count)?;
             tui::quiz::run(session, &db)?;
         }
         Command::Exam => {
@@ -79,7 +80,10 @@ fn print_stats(db: &Db) -> Result<()> {
     }
 
     println!();
-    println!("  {:<12} {:<8} {:<8} {:<8} Result", "Mode", "Score", "Total", "Pct");
+    println!(
+        "  {:<12} {:<8} {:<8} {:<8} Result",
+        "Mode", "Score", "Total", "Pct"
+    );
     println!("  {}", "─".repeat(52));
 
     for (mode, score, total) in &sessions {
@@ -93,7 +97,10 @@ fn print_stats(db: &Db) -> Result<()> {
         } else {
             "✗ Below passing"
         };
-        println!("  {:<12} {:<8} {:<8} {:<7}% {}", mode, score, total, pct, result);
+        println!(
+            "  {:<12} {:<8} {:<8} {:<7}% {}",
+            mode, score, total, pct, result
+        );
     }
 
     println!();

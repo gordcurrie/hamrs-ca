@@ -5,6 +5,8 @@ mod modes;
 mod questions;
 mod tui;
 
+use ai::ConceptClient;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use db::Db;
@@ -38,6 +40,7 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    ConceptClient::ensure_config();
     let cli = Cli::parse();
     let db = Db::open()?;
     let bank = QuestionBank::load();

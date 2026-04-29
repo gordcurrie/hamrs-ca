@@ -196,8 +196,15 @@ async fn run_topic_session(
             content: response,
         });
     } else {
-        // No pregenerated content and no AI backend — fall through to prompt loop
-        eprintln!("\n  No explanation available for {key} — no AI backend configured.\n");
+        // No pregenerated content and no AI backend — show questions, skip explanation
+        println!();
+        print_section_header(&format!("{section_name} — {key}"));
+        println!();
+        println!("  No explanation available — no AI backend configured.");
+        println!();
+        print_section_header("Related Exam Questions");
+        println!();
+        print_exam_questions(&related);
     }
 
     loop {

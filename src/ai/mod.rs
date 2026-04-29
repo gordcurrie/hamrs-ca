@@ -284,17 +284,17 @@ const EXAMPLE_CONFIG: &str = r#"# hamrs-ca configuration
 # Learn mode supports two AI backends for follow-up questions.
 # Uncomment and fill in one of the options below.
 
-# --- Option A: Anthropic (Claude) ---
-# Get a key at https://console.anthropic.com
-#
-# anthropic_api_key = "sk-ant-..."
-# model = "claude-sonnet-4-6"          # optional, this is the default
-
-# --- Option B: Ollama (local, no API key needed) ---
+# --- Option A: Ollama (local, no API key needed) ---
 # Install Ollama from https://ollama.com, then: ollama pull glm-4.7-flash
 #
 # ollama_host = "http://localhost:11434"   # optional, this is the default
 # ollama_model = "glm-4.7-flash"          # optional, this is the default
+
+# --- Option B: Anthropic (Claude) ---
+# Get a key at https://console.anthropic.com
+#
+# anthropic_api_key = "sk-ant-..."
+# model = "claude-sonnet-4-6"          # optional, this is the default
 "#;
 
 fn ensure_config_exists() {
@@ -302,9 +302,6 @@ fn ensure_config_exists() {
 }
 
 fn ensure_config_at(path: &std::path::Path) {
-    if path.exists() {
-        return;
-    }
     if let Some(dir) = path.parent() {
         if let Err(err) = std::fs::create_dir_all(dir) {
             eprintln!(
@@ -314,11 +311,37 @@ fn ensure_config_at(path: &std::path::Path) {
             return;
         }
     }
-    if let Err(err) = std::fs::write(path, EXAMPLE_CONFIG) {
-        eprintln!(
-            "  Warning: could not create example config at {}: {err}",
-            path.display()
-        );
+
+    // create_new(true) is atomic: fails with AlreadyExists if another process
+    // raced us, so we never overwrite an existing config.
+    use std::io::Write;
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(EXAMPLE_CONFIG.as_bytes()) {
+                eprintln!(
+                    "  Warning: could not write example config to {}: {err}",
+                    path.display()
+                );
+                return;
+            }
+            // Restrict permissions on Unix so the API key isn't world-readable
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(err) => {
+            eprintln!(
+                "  Warning: could not create example config at {}: {err}",
+                path.display()
+            );
+        }
     }
 }
 

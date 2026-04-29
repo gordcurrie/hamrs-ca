@@ -147,9 +147,13 @@ impl ConceptClient {
         }
     }
 
-    /// Call once when no backend is found: auto-creates the config file and prints a hint.
-    pub fn on_no_backend() {
+    /// Always call on startup: ensures the config file exists so users know where to configure.
+    pub fn ensure_config() {
         ensure_config_exists();
+    }
+
+    /// Call when no backend is found: prints a hint pointing at the config file.
+    pub fn on_no_backend() {
         eprintln!();
         eprintln!("  No AI backend found — follow-up questions are disabled.");
         eprintln!("  To enable them, edit: {}", config_path().display());

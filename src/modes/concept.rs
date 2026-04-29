@@ -17,6 +17,7 @@ const SECTION_NAMES: &[(u8, &str)] = &[
 ];
 
 pub async fn run(bank: &QuestionBank, db: &Db) -> Result<()> {
+    ConceptClient::ensure_config();
     let ai_available = ConceptClient::is_available().await;
     if !ai_available {
         ConceptClient::on_no_backend();

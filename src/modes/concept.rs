@@ -15,6 +15,11 @@ const SECTION_NAMES: &[(u8, &str)] = &[
 ];
 
 pub async fn run(bank: &QuestionBank) -> Result<()> {
+    let ai_available = ConceptClient::is_available().await;
+    if !ai_available {
+        ConceptClient::on_no_backend();
+    }
+
     loop {
         let Some(section) = pick_section()? else {
             break;
@@ -24,7 +29,7 @@ pub async fn run(bank: &QuestionBank) -> Result<()> {
             continue;
         };
 
-        if !run_topic_session(bank, section, subsection, &hint).await? {
+        if !run_topic_session(bank, section, subsection, &hint, ai_available).await? {
             break;
         }
     }
@@ -118,6 +123,7 @@ async fn run_topic_session(
     section: u8,
     subsection: u8,
     hint: &str,
+    ai_available: bool,
 ) -> Result<bool> {
     let section_name = SECTION_NAMES
         .iter()
@@ -154,7 +160,7 @@ async fn run_topic_session(
             role: "assistant",
             content: content.to_string(),
         });
-    } else {
+    } else if ai_available {
         // No pre-generated content — fall back to live LLM
         client = Some(match ConceptClient::new() {
             Ok(c) => c,
@@ -189,11 +195,25 @@ async fn run_topic_session(
             role: "assistant",
             content: response,
         });
+    } else {
+        // No pregenerated content and no AI backend — show questions, skip explanation
+        println!();
+        print_section_header(&format!("{section_name} — {key}"));
+        println!();
+        println!("  No explanation available — no AI backend configured.");
+        println!();
+        print_section_header("Related Exam Questions");
+        println!();
+        print_exam_questions(&related);
     }
 
     loop {
         println!();
-        print!("  Follow-up question, n / Enter for new topic, or q to quit: ");
+        if ai_available {
+            print!("  Follow-up question, n / Enter for next topic, or q to quit: ");
+        } else {
+            print!("  n / Enter for next topic, or q to quit: ");
+        }
         io::stdout().flush()?;
 
         let line = read_line()?;
@@ -204,6 +224,11 @@ async fn run_topic_session(
         }
         if trimmed == "q" || trimmed == "Q" {
             return Ok(false);
+        }
+
+        if !ai_available {
+            println!("  Follow-up questions are disabled. Add an AI backend to enable them.");
+            continue;
         }
 
         // Lazy-init client only when a follow-up is actually asked

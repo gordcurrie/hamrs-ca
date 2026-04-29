@@ -22,6 +22,42 @@ Be dense and precise. Aim for the depth of a good RF engineering textbook. No pa
 Use markdown formatting. For bullet points always use `- ` (dash space), never `*   ` with indentation. \
 Keep bullet content on a single line without indentation.";
 
+#[derive(Deserialize, Default)]
+struct HamrsConfig {
+    anthropic_api_key: Option<String>,
+    model: Option<String>,
+    ollama_host: Option<String>,
+    ollama_model: Option<String>,
+}
+
+fn config_path() -> std::path::PathBuf {
+    dirs::config_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("hamrs-ca")
+        .join("config.toml")
+}
+
+fn load_config() -> HamrsConfig {
+    load_config_from(&config_path())
+}
+
+fn load_config_from(path: &std::path::Path) -> HamrsConfig {
+    match std::fs::read_to_string(path) {
+        Ok(s) => match toml::from_str(&s) {
+            Ok(config) => config,
+            Err(err) => {
+                eprintln!("  Warning: failed to parse {}: {err}", path.display());
+                HamrsConfig::default()
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => HamrsConfig::default(),
+        Err(err) => {
+            eprintln!("  Warning: failed to read {}: {err}", path.display());
+            HamrsConfig::default()
+        }
+    }
+}
+
 enum Backend {
     Anthropic { api_key: String },
     Ollama { host: String },
@@ -82,13 +118,61 @@ pub struct Message {
 }
 
 impl ConceptClient {
+    /// Pure availability check — no side effects.
+    pub async fn is_available() -> bool {
+        let config = load_config();
+
+        let has_anthropic =
+            config.anthropic_api_key.is_some() || std::env::var("HAMRS_ANTHROPIC_API_KEY").is_ok();
+        if has_anthropic {
+            return true;
+        }
+
+        let host = config
+            .ollama_host
+            .or_else(|| std::env::var("OLLAMA_HOST").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
+
+        match Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+        {
+            Ok(client) => client
+                .get(format!("{host}/api/tags"))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    /// Call once when no backend is found: auto-creates the config file and prints a hint.
+    pub fn on_no_backend() {
+        ensure_config_exists();
+        eprintln!();
+        eprintln!("  No AI backend found — follow-up questions are disabled.");
+        eprintln!("  To enable them, edit: {}", config_path().display());
+        eprintln!();
+    }
+
     pub fn new() -> Result<Self> {
+        let HamrsConfig {
+            anthropic_api_key,
+            model: config_model,
+            ollama_host,
+            ollama_model,
+        } = load_config();
         let system_prompt = load_system_prompt();
 
-        // Prefer Anthropic if key is present, otherwise fall back to Ollama
-        if let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") {
-            let model = std::env::var("HAMRS_MODEL")
-                .unwrap_or_else(|_| DEFAULT_ANTHROPIC_MODEL.to_string());
+        // Prefer Anthropic if a key is configured, otherwise fall back to Ollama
+        let anthropic_key =
+            anthropic_api_key.or_else(|| std::env::var("HAMRS_ANTHROPIC_API_KEY").ok());
+
+        if let Some(api_key) = anthropic_key {
+            let model = config_model
+                .or_else(|| std::env::var("HAMRS_MODEL").ok())
+                .unwrap_or_else(|| DEFAULT_ANTHROPIC_MODEL.to_string());
             return Ok(Self {
                 client: Client::new(),
                 backend: Backend::Anthropic { api_key },
@@ -97,12 +181,18 @@ impl ConceptClient {
             });
         }
 
-        let host = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| DEFAULT_OLLAMA_HOST.to_string());
-        let model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| DEFAULT_OLLAMA_MODEL.to_string());
+        let host = ollama_host
+            .or_else(|| std::env::var("OLLAMA_HOST").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
+        let model = ollama_model
+            .or_else(|| std::env::var("OLLAMA_MODEL").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
 
         eprintln!("  Using Ollama at {host} (model: {model})");
-        eprintln!("  Set ANTHROPIC_API_KEY to use Claude instead.\n");
+        eprintln!(
+            "  Add anthropic_api_key to {} to use Claude instead.\n",
+            config_path().display()
+        );
 
         Ok(Self {
             client: Client::new(),
@@ -189,6 +279,72 @@ impl ConceptClient {
     }
 }
 
+const EXAMPLE_CONFIG: &str = r#"# hamrs-ca configuration
+#
+# Learn mode supports two AI backends for follow-up questions.
+# Uncomment and fill in one of the options below.
+
+# --- Option A: Ollama (local, no API key needed) ---
+# Install Ollama from https://ollama.com, then: ollama pull glm-4.7-flash
+#
+# ollama_host = "http://localhost:11434"   # optional, this is the default
+# ollama_model = "glm-4.7-flash"          # optional, this is the default
+
+# --- Option B: Anthropic (Claude) ---
+# Get a key at https://console.anthropic.com
+#
+# anthropic_api_key = "sk-ant-..."
+# model = "claude-sonnet-4-6"          # optional, this is the default
+"#;
+
+fn ensure_config_exists() {
+    ensure_config_at(&config_path());
+}
+
+fn ensure_config_at(path: &std::path::Path) {
+    if let Some(dir) = path.parent() {
+        if let Err(err) = std::fs::create_dir_all(dir) {
+            eprintln!(
+                "  Warning: could not create config directory {}: {err}",
+                dir.display()
+            );
+            return;
+        }
+    }
+
+    // create_new(true) is atomic: fails with AlreadyExists if another process
+    // raced us, so we never overwrite an existing config.
+    use std::io::Write;
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+    {
+        Ok(mut file) => {
+            if let Err(err) = file.write_all(EXAMPLE_CONFIG.as_bytes()) {
+                eprintln!(
+                    "  Warning: could not write example config to {}: {err}",
+                    path.display()
+                );
+                return;
+            }
+            // Restrict permissions on Unix so the API key isn't world-readable
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = file.set_permissions(std::fs::Permissions::from_mode(0o600));
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(err) => {
+            eprintln!(
+                "  Warning: could not create example config at {}: {err}",
+                path.display()
+            );
+        }
+    }
+}
+
 fn load_system_prompt() -> String {
     let config_path = dirs::config_local_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
@@ -196,4 +352,76 @@ fn load_system_prompt() -> String {
         .join("system_prompt.md");
 
     std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_defaults_to_none_when_file_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_config_from(&dir.path().join("nonexistent.toml"));
+        assert!(config.anthropic_api_key.is_none());
+        assert!(config.model.is_none());
+        assert!(config.ollama_host.is_none());
+        assert!(config.ollama_model.is_none());
+    }
+
+    #[test]
+    fn config_parses_anthropic_key() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "anthropic_api_key = \"sk-ant-test\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.anthropic_api_key.as_deref(), Some("sk-ant-test"));
+        assert!(config.model.is_none());
+    }
+
+    #[test]
+    fn config_parses_all_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "anthropic_api_key = \"sk-ant-x\"\nmodel = \"claude-opus-4-7\"\nollama_host = \"http://10.0.0.1:11434\"\nollama_model = \"gemma4\"\n",
+        )
+        .unwrap();
+        let config = load_config_from(&path);
+        assert_eq!(config.anthropic_api_key.as_deref(), Some("sk-ant-x"));
+        assert_eq!(config.model.as_deref(), Some("claude-opus-4-7"));
+        assert_eq!(config.ollama_host.as_deref(), Some("http://10.0.0.1:11434"));
+        assert_eq!(config.ollama_model.as_deref(), Some("gemma4"));
+    }
+
+    #[test]
+    fn config_ignores_unknown_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "unknown_key = \"value\"\n").unwrap();
+        let config = load_config_from(&path);
+        assert!(config.anthropic_api_key.is_none());
+    }
+
+    #[test]
+    fn ensure_config_creates_file_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("subdir").join("config.toml");
+        assert!(!path.exists());
+        ensure_config_at(&path);
+        assert!(path.exists());
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("anthropic_api_key"));
+        assert!(contents.contains("ollama_host"));
+    }
+
+    #[test]
+    fn ensure_config_does_not_overwrite_existing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "anthropic_api_key = \"sk-ant-keep\"\n").unwrap();
+        ensure_config_at(&path);
+        let contents = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, "anthropic_api_key = \"sk-ant-keep\"\n");
+    }
 }

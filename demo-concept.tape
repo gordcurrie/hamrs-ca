@@ -7,7 +7,7 @@ Set Theme "Dracula"
 Set TypingSpeed 80ms
 Set Shell "zsh"
 
-Env PATH "/Users/gcurrie/dev/hamrs-ca/target/release:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+Env PATH "./target/release:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 Sleep 800ms
 

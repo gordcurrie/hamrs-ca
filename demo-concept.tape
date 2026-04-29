@@ -1,8 +1,8 @@
 Output assets/demo-concept.gif
 
-Set FontSize 14
+Set FontSize 13
 Set Width 1200
-Set Height 700
+Set Height 1300
 Set Theme "Dracula"
 Set TypingSpeed 80ms
 Set Shell "zsh"
@@ -15,20 +15,21 @@ Type "hamrs concept"
 Enter
 Sleep 700ms
 
-# Section picker — pick section 7 (Propagation)
-Type "7"
+# Section picker — pick section 1 (Regulations & Licensing)
+Type "1"
 Sleep 300ms
 Enter
 Sleep 600ms
 
-# Subsection picker — pick subsection 1
-Type "1"
+# Subsection picker — pick subsection 18 (Repeaters and Special Transmission Types)
+# Short content (24 lines) + only 3 exam questions — fits on one screen
+Type "18"
 Sleep 300ms
 Enter
 Sleep 1200ms
 
-# Pause so viewer can read the content
-Sleep 5000ms
+# Pause so viewer can read the narrative and questions
+Sleep 3500ms
 
 # Press n to return to subsection picker
 Type "n"

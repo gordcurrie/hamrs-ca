@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
             tui::quiz::run(session, &db)?;
         }
         Command::Concept => {
-            modes::concept::run(&bank).await?;
+            modes::concept::run(&bank, &db).await?;
         }
         Command::Stats => {
             print_stats(&db)?;

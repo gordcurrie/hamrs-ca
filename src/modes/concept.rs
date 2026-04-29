@@ -1,6 +1,8 @@
 use crate::ai::{ConceptClient, Message};
+use crate::db::Db;
 use crate::questions::QuestionBank;
 use anyhow::Result;
+use std::collections::HashSet;
 use std::io::{self, BufRead, Write};
 
 const SECTION_NAMES: &[(u8, &str)] = &[
@@ -14,22 +16,34 @@ const SECTION_NAMES: &[(u8, &str)] = &[
     (8, "Interference"),
 ];
 
-pub async fn run(bank: &QuestionBank) -> Result<()> {
+pub async fn run(bank: &QuestionBank, db: &Db) -> Result<()> {
     let ai_available = ConceptClient::is_available().await;
     if !ai_available {
         ConceptClient::on_no_backend();
     }
 
+    let mut visited = db.get_visited_concepts()?;
+
     loop {
-        let Some(section) = pick_section()? else {
+        let Some(section) = pick_section(bank, &visited)? else {
             break;
         };
 
-        let Some((subsection, hint)) = pick_subsection(bank, section)? else {
+        let Some((subsection, hint)) = pick_subsection(bank, db, section, &mut visited)? else {
             continue;
         };
 
-        if !run_topic_session(bank, section, subsection, &hint, ai_available).await? {
+        if !run_topic_session(
+            bank,
+            db,
+            section,
+            subsection,
+            &hint,
+            ai_available,
+            &mut visited,
+        )
+        .await?
+        {
             break;
         }
     }
@@ -37,13 +51,35 @@ pub async fn run(bank: &QuestionBank) -> Result<()> {
     Ok(())
 }
 
-fn pick_section() -> Result<Option<u8>> {
+fn section_progress(bank: &QuestionBank, section: u8, visited: &HashSet<String>) -> (usize, usize) {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut done = 0usize;
+    for q in bank.by_section(section) {
+        if seen.insert(q.subsection) {
+            let key = format!("B-{section:03}-{:03}", q.subsection);
+            if visited.contains(&key) {
+                done += 1;
+            }
+        }
+    }
+    (done, seen.len())
+}
+
+fn pick_section(bank: &QuestionBank, visited: &HashSet<String>) -> Result<Option<u8>> {
     loop {
         println!();
         println!("  \x1b[1mLearn Mode\x1b[0m — Select a section");
         println!();
-        for (i, (_, name)) in SECTION_NAMES.iter().enumerate() {
-            println!("  {}.  {}", i + 1, name);
+        for (i, (num, name)) in SECTION_NAMES.iter().enumerate() {
+            let (done, total) = section_progress(bank, *num, visited);
+            let badge = if total > 0 && done == total {
+                " \x1b[32m✓\x1b[0m".to_string()
+            } else if done > 0 {
+                format!(" \x1b[2m({done}/{total})\x1b[0m")
+            } else {
+                String::new()
+            };
+            println!("  {}.  {}{}", i + 1, name, badge);
         }
         println!();
         print!("  Section (1–{}), or q to quit: ", SECTION_NAMES.len());
@@ -62,7 +98,12 @@ fn pick_section() -> Result<Option<u8>> {
     }
 }
 
-fn pick_subsection(bank: &QuestionBank, section: u8) -> Result<Option<(u8, String)>> {
+fn pick_subsection(
+    bank: &QuestionBank,
+    db: &Db,
+    section: u8,
+    visited: &mut HashSet<String>,
+) -> Result<Option<(u8, String)>> {
     let mut subsections: Vec<(u8, usize, String)> = Vec::new();
     let mut current_sub = 0u8;
     let mut count = 0usize;
@@ -84,26 +125,34 @@ fn pick_subsection(bank: &QuestionBank, section: u8) -> Result<Option<(u8, Strin
         subsections.push((current_sub, count, first_text));
     }
 
-    let section_name = SECTION_NAMES
-        .iter()
-        .find(|(n, _)| *n == section)
-        .map(|(_, name)| *name)
-        .unwrap_or("Unknown");
+    let section_name = section_name(section);
 
     loop {
         println!();
         println!("  \x1b[1m{section_name}\x1b[0m — Select a topic");
         println!();
         for (i, (sub, count, hint)) in subsections.iter().enumerate() {
-            println!("  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q)", i + 1);
+            let key = format!("B-{section:03}-{sub:03}");
+            let check = if visited.contains(&key) {
+                " \x1b[32m✓\x1b[0m"
+            } else {
+                ""
+            };
+            println!(
+                "  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q){check}",
+                i + 1
+            );
         }
         println!();
-        print!("  Topic number, or b to go back: ");
+        print!("  Topic number, r to reset progress, or b to go back: ");
         io::stdout().flush()?;
 
         let line = read_line()?;
         match line.trim() {
             "b" | "B" => return Ok(None),
+            "r" | "R" => {
+                run_reset_menu(db, section, section_name, &subsections, visited)?;
+            }
             s => {
                 if let Ok(n) = s.parse::<usize>() {
                     if n >= 1 && n <= subsections.len() {
@@ -117,20 +166,61 @@ fn pick_subsection(bank: &QuestionBank, section: u8) -> Result<Option<(u8, Strin
     }
 }
 
+fn run_reset_menu(
+    db: &Db,
+    section: u8,
+    section_name: &str,
+    subsections: &[(u8, usize, String)],
+    visited: &mut HashSet<String>,
+) -> Result<()> {
+    loop {
+        println!();
+        print!("  Reset — topic number, a for all of {section_name}, or b to cancel: ");
+        io::stdout().flush()?;
+
+        let line = read_line()?;
+        match line.trim() {
+            "b" | "B" => return Ok(()),
+            "a" | "A" => {
+                print!("  Reset all progress for {section_name}? (y/n): ");
+                io::stdout().flush()?;
+                let confirm = read_line()?;
+                if confirm.trim() == "y" || confirm.trim() == "Y" {
+                    db.reset_concept_section(section)?;
+                    let prefix = format!("B-{section:03}-");
+                    visited.retain(|k| !k.starts_with(&prefix));
+                    println!("  Progress reset for {section_name}.");
+                }
+                return Ok(());
+            }
+            s => {
+                if let Ok(n) = s.parse::<usize>() {
+                    if n >= 1 && n <= subsections.len() {
+                        let (sub, _, _) = &subsections[n - 1];
+                        let key = format!("B-{section:03}-{sub:03}");
+                        db.reset_concept_topic(&key)?;
+                        visited.remove(&key);
+                        println!("  Topic {key} unmarked.");
+                        return Ok(());
+                    }
+                }
+                println!("  Invalid choice.");
+            }
+        }
+    }
+}
+
 /// Returns Ok(true) to continue to the next topic, Ok(false) when the user quits.
 async fn run_topic_session(
     bank: &QuestionBank,
+    db: &Db,
     section: u8,
     subsection: u8,
     hint: &str,
     ai_available: bool,
+    visited: &mut HashSet<String>,
 ) -> Result<bool> {
-    let section_name = SECTION_NAMES
-        .iter()
-        .find(|(n, _)| *n == section)
-        .map(|(_, name)| *name)
-        .unwrap_or("Unknown");
-
+    let section_name = section_name(section);
     let related: Vec<_> = bank.by_subsection(section, subsection).collect();
     let key = format!("B-{section:03}-{subsection:03}");
 
@@ -149,7 +239,6 @@ async fn run_topic_session(
         println!();
         print_exam_questions(&related);
 
-        // Seed conversation history so follow-ups have context
         let initial_prompt =
             build_initial_prompt(section, subsection, section_name, hint, &related);
         messages.push(Message {
@@ -161,7 +250,6 @@ async fn run_topic_session(
             content: content.to_string(),
         });
     } else if ai_available {
-        // No pre-generated content — fall back to live LLM
         client = Some(match ConceptClient::new() {
             Ok(c) => c,
             Err(e) => {
@@ -196,7 +284,6 @@ async fn run_topic_session(
             content: response,
         });
     } else {
-        // No pregenerated content and no AI backend — show questions, skip explanation
         println!();
         print_section_header(&format!("{section_name} — {key}"));
         println!();
@@ -206,6 +293,10 @@ async fn run_topic_session(
         println!();
         print_exam_questions(&related);
     }
+
+    // Mark visited as soon as content is shown
+    db.mark_concept_visited(&key)?;
+    visited.insert(key.clone());
 
     loop {
         println!();
@@ -231,7 +322,6 @@ async fn run_topic_session(
             continue;
         }
 
-        // Lazy-init client only when a follow-up is actually asked
         if client.is_none() {
             client = Some(match ConceptClient::new() {
                 Ok(c) => c,
@@ -342,6 +432,14 @@ fn print_section_header(title: &str) {
     let line = "─".repeat(width);
     println!("\x1b[1m  {title}\x1b[0m");
     println!("  {line}");
+}
+
+fn section_name(section: u8) -> &'static str {
+    SECTION_NAMES
+        .iter()
+        .find(|(n, _)| *n == section)
+        .map(|(_, name)| *name)
+        .unwrap_or("Unknown")
 }
 
 fn read_line() -> Result<String> {

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rusqlite::{params, Connection};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -65,6 +65,11 @@ impl Db {
 
             CREATE INDEX IF NOT EXISTS idx_attempts_question
                 ON attempts(question_id);
+
+            CREATE TABLE IF NOT EXISTS concept_progress (
+                key        TEXT PRIMARY KEY,
+                visited_at INTEGER NOT NULL
+            );
         ",
         )?;
         Ok(())
@@ -137,6 +142,38 @@ impl Db {
                 })
             })
             .collect())
+    }
+
+    pub fn mark_concept_visited(&self, key: &str) -> Result<()> {
+        let now = unix_now();
+        self.conn.execute(
+            "INSERT OR REPLACE INTO concept_progress (key, visited_at) VALUES (?1, ?2)",
+            params![key, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_visited_concepts(&self) -> Result<HashSet<String>> {
+        let mut stmt = self.conn.prepare("SELECT key FROM concept_progress")?;
+        let keys = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<HashSet<_>>>()?;
+        Ok(keys)
+    }
+
+    pub fn reset_concept_topic(&self, key: &str) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM concept_progress WHERE key = ?1", params![key])?;
+        Ok(())
+    }
+
+    pub fn reset_concept_section(&self, section: u8) -> Result<()> {
+        let prefix = format!("B-{section:03}-");
+        self.conn.execute(
+            "DELETE FROM concept_progress WHERE key LIKE ?1",
+            params![format!("{prefix}%")],
+        )?;
+        Ok(())
     }
 
     pub fn recent_sessions(&self, limit: u32) -> Result<Vec<(String, u32, u32)>> {
@@ -227,5 +264,48 @@ mod tests {
     #[test]
     fn weight_zero_correct() {
         assert_eq!(stats(5, 0).weight(), 4);
+    }
+
+    #[test]
+    fn concept_mark_and_retrieve() {
+        let db = Db::open_in_memory().unwrap();
+        db.mark_concept_visited("B-001-003").unwrap();
+        db.mark_concept_visited("B-001-007").unwrap();
+        let visited = db.get_visited_concepts().unwrap();
+        assert!(visited.contains("B-001-003"));
+        assert!(visited.contains("B-001-007"));
+        assert!(!visited.contains("B-002-001"));
+    }
+
+    #[test]
+    fn concept_mark_idempotent() {
+        let db = Db::open_in_memory().unwrap();
+        db.mark_concept_visited("B-001-003").unwrap();
+        db.mark_concept_visited("B-001-003").unwrap();
+        let visited = db.get_visited_concepts().unwrap();
+        assert_eq!(visited.len(), 1);
+    }
+
+    #[test]
+    fn concept_reset_topic() {
+        let db = Db::open_in_memory().unwrap();
+        db.mark_concept_visited("B-001-003").unwrap();
+        db.mark_concept_visited("B-001-007").unwrap();
+        db.reset_concept_topic("B-001-003").unwrap();
+        let visited = db.get_visited_concepts().unwrap();
+        assert!(!visited.contains("B-001-003"));
+        assert!(visited.contains("B-001-007"));
+    }
+
+    #[test]
+    fn concept_reset_section() {
+        let db = Db::open_in_memory().unwrap();
+        db.mark_concept_visited("B-001-003").unwrap();
+        db.mark_concept_visited("B-001-007").unwrap();
+        db.mark_concept_visited("B-002-001").unwrap();
+        db.reset_concept_section(1).unwrap();
+        let visited = db.get_visited_concepts().unwrap();
+        assert!(!visited.iter().any(|k| k.starts_with("B-001-")));
+        assert!(visited.contains("B-002-001"));
     }
 }

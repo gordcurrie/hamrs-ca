@@ -196,7 +196,11 @@ impl Db {
 }
 
 fn db_path() -> Result<PathBuf> {
-    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    let base = std::env::var("XDG_DATA_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".local").join("share")))
+        .unwrap_or_else(|| PathBuf::from(".local/share"));
     Ok(base.join("hamrs-ca").join("progress.db"))
 }
 

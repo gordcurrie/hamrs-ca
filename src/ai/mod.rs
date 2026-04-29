@@ -31,10 +31,15 @@ struct HamrsConfig {
 }
 
 fn config_path() -> std::path::PathBuf {
-    dirs::config_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("hamrs-ca")
-        .join("config.toml")
+    xdg_config_dir().join("hamrs-ca").join("config.toml")
+}
+
+fn xdg_config_dir() -> std::path::PathBuf {
+    std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .map(std::path::PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
+        .unwrap_or_else(|| std::path::PathBuf::from(".config"))
 }
 
 fn load_config() -> HamrsConfig {
@@ -350,10 +355,7 @@ fn ensure_config_at(path: &std::path::Path) {
 }
 
 fn load_system_prompt() -> String {
-    let config_path = dirs::config_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("hamrs-ca")
-        .join("system_prompt.md");
+    let config_path = xdg_config_dir().join("hamrs-ca").join("system_prompt.md");
 
     std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
 }

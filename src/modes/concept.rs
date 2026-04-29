@@ -191,9 +191,15 @@ async fn run_topic_session(
         });
     }
 
+    let ai_available = ConceptClient::is_available().await;
+
     loop {
         println!();
-        print!("  Follow-up question, n / Enter for new topic, or q to quit: ");
+        if ai_available {
+            print!("  Follow-up question, n / Enter for next topic, or q to quit: ");
+        } else {
+            print!("  n / Enter for next topic, or q to quit: ");
+        }
         io::stdout().flush()?;
 
         let line = read_line()?;
@@ -204,6 +210,10 @@ async fn run_topic_session(
         }
         if trimmed == "q" || trimmed == "Q" {
             return Ok(false);
+        }
+
+        if !ai_available {
+            continue;
         }
 
         // Lazy-init client only when a follow-up is actually asked

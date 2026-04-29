@@ -116,14 +116,16 @@ OLLAMA_HOST=http://192.168.1.10:11434 hamrs concept
 
 ### Option B — Anthropic API
 
-```bash
-# Add to your shell profile (~/.zshrc or ~/.bashrc)
-export ANTHROPIC_API_KEY="sk-ant-..."
+Create `~/.config/hamrs-ca/config.toml` and add your API key:
+
+```toml
+anthropic_api_key = "sk-ant-..."
 ```
 
-If `ANTHROPIC_API_KEY` is set, it takes priority over Ollama. Default model is `claude-sonnet-4-6`. Override with:
-```bash
-HAMRS_MODEL=claude-opus-4-7 hamrs concept
+Claude takes priority over Ollama when a key is configured. Default model is `claude-sonnet-4-6`. Override with:
+
+```toml
+model = "claude-opus-4-7"
 ```
 
 ### Customizing the system prompt

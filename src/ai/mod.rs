@@ -22,6 +22,26 @@ Be dense and precise. Aim for the depth of a good RF engineering textbook. No pa
 Use markdown formatting. For bullet points always use `- ` (dash space), never `*   ` with indentation. \
 Keep bullet content on a single line without indentation.";
 
+#[derive(Deserialize, Default)]
+struct HamrsConfig {
+    anthropic_api_key: Option<String>,
+    model: Option<String>,
+    ollama_host: Option<String>,
+    ollama_model: Option<String>,
+}
+
+fn load_config() -> HamrsConfig {
+    let path = dirs::config_local_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .join("hamrs-ca")
+        .join("config.toml");
+
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| toml::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 enum Backend {
     Anthropic { api_key: String },
     Ollama { host: String },
@@ -82,13 +102,62 @@ pub struct Message {
 }
 
 impl ConceptClient {
+    pub async fn is_available() -> bool {
+        let config = load_config();
+
+        let has_anthropic = config.anthropic_api_key.is_some()
+            || std::env::var("HAMRS_ANTHROPIC_API_KEY").is_ok();
+        if has_anthropic {
+            return true;
+        }
+
+        let host = config
+            .ollama_host
+            .or_else(|| std::env::var("OLLAMA_HOST").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
+
+        let Ok(client) = Client::builder()
+            .timeout(std::time::Duration::from_secs(2))
+            .build()
+        else {
+            return false;
+        };
+        let available = client
+            .get(format!("{host}/api/tags"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
+
+        if !available {
+            ensure_config_exists();
+            let config_path = dirs::config_local_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join("hamrs-ca")
+                .join("config.toml");
+            eprintln!();
+            eprintln!("  No AI backend found — follow-up questions are disabled.");
+            eprintln!("  To enable them, edit: {}", config_path.display());
+            eprintln!();
+        }
+
+        available
+    }
+
     pub fn new() -> Result<Self> {
+        let config = load_config();
         let system_prompt = load_system_prompt();
 
-        // Prefer Anthropic if key is present, otherwise fall back to Ollama
-        if let Ok(api_key) = std::env::var("ANTHROPIC_API_KEY") {
-            let model = std::env::var("HAMRS_MODEL")
-                .unwrap_or_else(|_| DEFAULT_ANTHROPIC_MODEL.to_string());
+        // Prefer Anthropic if a key is configured, otherwise fall back to Ollama
+        let anthropic_key = config
+            .anthropic_api_key
+            .or_else(|| std::env::var("HAMRS_ANTHROPIC_API_KEY").ok());
+
+        if let Some(api_key) = anthropic_key {
+            let model = config
+                .model
+                .or_else(|| std::env::var("HAMRS_MODEL").ok())
+                .unwrap_or_else(|| DEFAULT_ANTHROPIC_MODEL.to_string());
             return Ok(Self {
                 client: Client::new(),
                 backend: Backend::Anthropic { api_key },
@@ -97,12 +166,17 @@ impl ConceptClient {
             });
         }
 
-        let host = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| DEFAULT_OLLAMA_HOST.to_string());
-        let model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| DEFAULT_OLLAMA_MODEL.to_string());
+        let host = config
+            .ollama_host
+            .or_else(|| std::env::var("OLLAMA_HOST").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
+        let model = config
+            .ollama_model
+            .or_else(|| std::env::var("OLLAMA_MODEL").ok())
+            .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
 
         eprintln!("  Using Ollama at {host} (model: {model})");
-        eprintln!("  Set ANTHROPIC_API_KEY to use Claude instead.\n");
+        eprintln!("  Add anthropic_api_key to ~/.config/hamrs-ca/config.toml to use Claude instead.\n");
 
         Ok(Self {
             client: Client::new(),
@@ -186,6 +260,38 @@ impl ConceptClient {
 
         let parsed: OllamaResponse = resp.json().await?;
         Ok(parsed.message.content)
+    }
+}
+
+const EXAMPLE_CONFIG: &str = r#"# hamrs-ca configuration
+#
+# Learn mode supports two AI backends for follow-up questions.
+# Uncomment and fill in one of the options below.
+
+# --- Option A: Anthropic (Claude) ---
+# Get a key at https://console.anthropic.com
+#
+# anthropic_api_key = "sk-ant-..."
+# model = "claude-sonnet-4-6"          # optional, this is the default
+
+# --- Option B: Ollama (local, no API key needed) ---
+# Install Ollama from https://ollama.com, then: ollama pull glm-4.7-flash
+#
+# ollama_host = "http://localhost:11434"   # optional, this is the default
+# ollama_model = "glm-4.7-flash"          # optional, this is the default
+"#;
+
+fn ensure_config_exists() {
+    let Some(config_dir) = dirs::config_local_dir() else {
+        return;
+    };
+    let dir = config_dir.join("hamrs-ca");
+    let path = dir.join("config.toml");
+    if path.exists() {
+        return;
+    }
+    if std::fs::create_dir_all(&dir).is_ok() {
+        let _ = std::fs::write(&path, EXAMPLE_CONFIG);
     }
 }
 

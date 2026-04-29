@@ -144,7 +144,7 @@ If `~/.config/hamrs-ca/system_prompt.md` exists it overrides the built-in defaul
 
 ## Question Bank
 
-The exam questions are sourced from the ISED [Amateur Radio Basic Qualification question bank](https://www.ic.gc.ca/eic/site/smt-gst.nsf/eng/sf01742.html), which is public domain.
+The exam questions are sourced from the ISED [Amateur Radio Operator Certificate Services](https://ised-isde.canada.ca/site/amateur-radio-operator-certificate-services/en/downloads) downloads page, which is public domain.
 
 **984 questions across 8 sections:**
 

@@ -213,6 +213,7 @@ async fn run_topic_session(
         }
 
         if !ai_available {
+            println!("  Follow-up questions are disabled. Add an AI backend to enable them.");
             continue;
         }
 

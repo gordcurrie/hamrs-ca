@@ -128,6 +128,8 @@ Claude takes priority over Ollama when a key is configured. Default model is `cl
 model = "claude-opus-4-7"
 ```
 
+For CI or scripting, you can also set `HAMRS_ANTHROPIC_API_KEY` as an environment variable instead of using the config file.
+
 ### Customizing the system prompt
 
 The AI's teaching style is controlled by a system prompt. To customize it:

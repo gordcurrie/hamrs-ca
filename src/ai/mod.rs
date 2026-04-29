@@ -30,20 +30,32 @@ struct HamrsConfig {
     ollama_model: Option<String>,
 }
 
-fn load_config() -> HamrsConfig {
-    let path = dirs::config_local_dir()
+fn config_path() -> std::path::PathBuf {
+    dirs::config_local_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("."))
         .join("hamrs-ca")
-        .join("config.toml");
+        .join("config.toml")
+}
 
-    load_config_from(&path)
+fn load_config() -> HamrsConfig {
+    load_config_from(&config_path())
 }
 
 fn load_config_from(path: &std::path::Path) -> HamrsConfig {
-    std::fs::read_to_string(path)
-        .ok()
-        .and_then(|s| toml::from_str(&s).ok())
-        .unwrap_or_default()
+    match std::fs::read_to_string(path) {
+        Ok(s) => match toml::from_str(&s) {
+            Ok(config) => config,
+            Err(err) => {
+                eprintln!("  Warning: failed to parse {}: {err}", path.display());
+                HamrsConfig::default()
+            }
+        },
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => HamrsConfig::default(),
+        Err(err) => {
+            eprintln!("  Warning: failed to read {}: {err}", path.display());
+            HamrsConfig::default()
+        }
+    }
 }
 
 enum Backend {
@@ -120,28 +132,24 @@ impl ConceptClient {
             .or_else(|| std::env::var("OLLAMA_HOST").ok())
             .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
 
-        let Ok(client) = Client::builder()
+        let available = match Client::builder()
             .timeout(std::time::Duration::from_secs(2))
             .build()
-        else {
-            return false;
+        {
+            Ok(client) => client
+                .get(format!("{host}/api/tags"))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false),
+            Err(_) => false,
         };
-        let available = client
-            .get(format!("{host}/api/tags"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false);
 
         if !available {
             ensure_config_exists();
-            let config_path = dirs::config_local_dir()
-                .unwrap_or_else(|| std::path::PathBuf::from("."))
-                .join("hamrs-ca")
-                .join("config.toml");
             eprintln!();
             eprintln!("  No AI backend found — follow-up questions are disabled.");
-            eprintln!("  To enable them, edit: {}", config_path.display());
+            eprintln!("  To enable them, edit: {}", config_path().display());
             eprintln!();
         }
 
@@ -288,10 +296,7 @@ const EXAMPLE_CONFIG: &str = r#"# hamrs-ca configuration
 "#;
 
 fn ensure_config_exists() {
-    let Some(config_dir) = dirs::config_local_dir() else {
-        return;
-    };
-    ensure_config_at(&config_dir.join("hamrs-ca").join("config.toml"));
+    ensure_config_at(&config_path());
 }
 
 fn ensure_config_at(path: &std::path::Path) {

@@ -116,7 +116,7 @@ OLLAMA_HOST=http://192.168.1.10:11434 hamrs concept
 
 ### Option B — Anthropic API
 
-Create `~/.config/hamrs-ca/config.toml` and add your API key:
+Create `config.toml` in the hamrs-ca config directory and add your API key. The exact path is platform-dependent (`~/.config/hamrs-ca/` on Linux, `~/Library/Application Support/hamrs-ca/` on macOS) — when no backend is found, `hamrs concept` prints the full path for you.
 
 ```toml
 anthropic_api_key = "sk-ant-..."

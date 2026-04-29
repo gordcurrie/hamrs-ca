@@ -118,6 +118,7 @@ pub struct Message {
 }
 
 impl ConceptClient {
+    /// Pure availability check — no side effects.
     pub async fn is_available() -> bool {
         let config = load_config();
 
@@ -132,7 +133,7 @@ impl ConceptClient {
             .or_else(|| std::env::var("OLLAMA_HOST").ok())
             .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
 
-        let available = match Client::builder()
+        match Client::builder()
             .timeout(std::time::Duration::from_secs(2))
             .build()
         {
@@ -143,17 +144,16 @@ impl ConceptClient {
                 .map(|r| r.status().is_success())
                 .unwrap_or(false),
             Err(_) => false,
-        };
-
-        if !available {
-            ensure_config_exists();
-            eprintln!();
-            eprintln!("  No AI backend found — follow-up questions are disabled.");
-            eprintln!("  To enable them, edit: {}", config_path().display());
-            eprintln!();
         }
+    }
 
-        available
+    /// Call once when no backend is found: auto-creates the config file and prints a hint.
+    pub fn on_no_backend() {
+        ensure_config_exists();
+        eprintln!();
+        eprintln!("  No AI backend found — follow-up questions are disabled.");
+        eprintln!("  To enable them, edit: {}", config_path().display());
+        eprintln!();
     }
 
     pub fn new() -> Result<Self> {
@@ -306,9 +306,19 @@ fn ensure_config_at(path: &std::path::Path) {
         return;
     }
     if let Some(dir) = path.parent() {
-        if std::fs::create_dir_all(dir).is_ok() {
-            let _ = std::fs::write(path, EXAMPLE_CONFIG);
+        if let Err(err) = std::fs::create_dir_all(dir) {
+            eprintln!(
+                "  Warning: could not create config directory {}: {err}",
+                dir.display()
+            );
+            return;
         }
+    }
+    if let Err(err) = std::fs::write(path, EXAMPLE_CONFIG) {
+        eprintln!(
+            "  Warning: could not create example config at {}: {err}",
+            path.display()
+        );
     }
 }
 
@@ -327,7 +337,8 @@ mod tests {
 
     #[test]
     fn config_defaults_to_none_when_file_missing() {
-        let config = load_config_from(std::path::Path::new("/nonexistent/config.toml"));
+        let dir = tempfile::tempdir().unwrap();
+        let config = load_config_from(&dir.path().join("nonexistent.toml"));
         assert!(config.anthropic_api_key.is_none());
         assert!(config.model.is_none());
         assert!(config.ollama_host.is_none());

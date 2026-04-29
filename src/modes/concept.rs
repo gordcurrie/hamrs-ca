@@ -15,6 +15,11 @@ const SECTION_NAMES: &[(u8, &str)] = &[
 ];
 
 pub async fn run(bank: &QuestionBank) -> Result<()> {
+    let ai_available = ConceptClient::is_available().await;
+    if !ai_available {
+        ConceptClient::on_no_backend();
+    }
+
     loop {
         let Some(section) = pick_section()? else {
             break;
@@ -24,7 +29,7 @@ pub async fn run(bank: &QuestionBank) -> Result<()> {
             continue;
         };
 
-        if !run_topic_session(bank, section, subsection, &hint).await? {
+        if !run_topic_session(bank, section, subsection, &hint, ai_available).await? {
             break;
         }
     }
@@ -118,6 +123,7 @@ async fn run_topic_session(
     section: u8,
     subsection: u8,
     hint: &str,
+    ai_available: bool,
 ) -> Result<bool> {
     let section_name = SECTION_NAMES
         .iter()
@@ -131,7 +137,6 @@ async fn run_topic_session(
     let mut messages: Vec<Message> = Vec::new();
     let mut client: Option<ConceptClient> = None;
 
-    let ai_available = ConceptClient::is_available().await;
     let pregenerated = crate::content::get_pregenerated_content(&key);
 
     if let Some(content) = pregenerated {
@@ -191,9 +196,8 @@ async fn run_topic_session(
             content: response,
         });
     } else {
-        // No pregenerated content and no AI backend
+        // No pregenerated content and no AI backend — fall through to prompt loop
         eprintln!("\n  No explanation available for {key} — no AI backend configured.\n");
-        return Ok(true);
     }
 
     loop {

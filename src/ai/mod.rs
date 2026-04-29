@@ -157,17 +157,20 @@ impl ConceptClient {
     }
 
     pub fn new() -> Result<Self> {
-        let config = load_config();
+        let HamrsConfig {
+            anthropic_api_key,
+            model: config_model,
+            ollama_host,
+            ollama_model,
+        } = load_config();
         let system_prompt = load_system_prompt();
 
         // Prefer Anthropic if a key is configured, otherwise fall back to Ollama
-        let anthropic_key = config
-            .anthropic_api_key
-            .or_else(|| std::env::var("HAMRS_ANTHROPIC_API_KEY").ok());
+        let anthropic_key =
+            anthropic_api_key.or_else(|| std::env::var("HAMRS_ANTHROPIC_API_KEY").ok());
 
         if let Some(api_key) = anthropic_key {
-            let model = config
-                .model
+            let model = config_model
                 .or_else(|| std::env::var("HAMRS_MODEL").ok())
                 .unwrap_or_else(|| DEFAULT_ANTHROPIC_MODEL.to_string());
             return Ok(Self {
@@ -178,18 +181,17 @@ impl ConceptClient {
             });
         }
 
-        let host = config
-            .ollama_host
+        let host = ollama_host
             .or_else(|| std::env::var("OLLAMA_HOST").ok())
             .unwrap_or_else(|| DEFAULT_OLLAMA_HOST.to_string());
-        let model = config
-            .ollama_model
+        let model = ollama_model
             .or_else(|| std::env::var("OLLAMA_MODEL").ok())
             .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
 
         eprintln!("  Using Ollama at {host} (model: {model})");
         eprintln!(
-            "  Add anthropic_api_key to ~/.config/hamrs-ca/config.toml to use Claude instead.\n"
+            "  Add anthropic_api_key to {} to use Claude instead.\n",
+            config_path().display()
         );
 
         Ok(Self {

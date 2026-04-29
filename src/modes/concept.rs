@@ -131,6 +131,7 @@ async fn run_topic_session(
     let mut messages: Vec<Message> = Vec::new();
     let mut client: Option<ConceptClient> = None;
 
+    let ai_available = ConceptClient::is_available().await;
     let pregenerated = crate::content::get_pregenerated_content(&key);
 
     if let Some(content) = pregenerated {
@@ -154,7 +155,7 @@ async fn run_topic_session(
             role: "assistant",
             content: content.to_string(),
         });
-    } else {
+    } else if ai_available {
         // No pre-generated content — fall back to live LLM
         client = Some(match ConceptClient::new() {
             Ok(c) => c,
@@ -189,9 +190,11 @@ async fn run_topic_session(
             role: "assistant",
             content: response,
         });
+    } else {
+        // No pregenerated content and no AI backend
+        eprintln!("\n  No explanation available for {key} — no AI backend configured.\n");
+        return Ok(true);
     }
-
-    let ai_available = ConceptClient::is_available().await;
 
     loop {
         println!();

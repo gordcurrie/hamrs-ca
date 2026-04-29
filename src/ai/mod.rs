@@ -109,8 +109,8 @@ impl ConceptClient {
     pub async fn is_available() -> bool {
         let config = load_config();
 
-        let has_anthropic = config.anthropic_api_key.is_some()
-            || std::env::var("HAMRS_ANTHROPIC_API_KEY").is_ok();
+        let has_anthropic =
+            config.anthropic_api_key.is_some() || std::env::var("HAMRS_ANTHROPIC_API_KEY").is_ok();
         if has_anthropic {
             return true;
         }
@@ -180,7 +180,9 @@ impl ConceptClient {
             .unwrap_or_else(|| DEFAULT_OLLAMA_MODEL.to_string());
 
         eprintln!("  Using Ollama at {host} (model: {model})");
-        eprintln!("  Add anthropic_api_key to ~/.config/hamrs-ca/config.toml to use Claude instead.\n");
+        eprintln!(
+            "  Add anthropic_api_key to ~/.config/hamrs-ca/config.toml to use Claude instead.\n"
+        );
 
         Ok(Self {
             client: Client::new(),

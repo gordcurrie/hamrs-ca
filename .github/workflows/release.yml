@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          BINARY=target/${{ matrix.target }}/release/hamrs
+          ARCHIVE=hamrs-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          tar czf "$ARCHIVE" -C "$(dirname "$BINARY")" "$(basename "$BINARY")"
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARCHIVE }}
+          generate_release_notes: true

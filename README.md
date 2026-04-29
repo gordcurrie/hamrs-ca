@@ -9,6 +9,9 @@ Built for people who want to actually understand the RF engineering — not just
 ## Features
 
 **Learn Mode** (AI powered)
+
+![concept mode demo](assets/demo-concept.gif)
+
 - Browse all 8 sections by topic
 - Engineering-depth explanations — signal physics, circuit behaviour, propagation mechanics
 - Regulations covered with context and rationale, not just rules
@@ -16,6 +19,9 @@ Built for people who want to actually understand the RF engineering — not just
 - Follow-up questions supported — it's a conversation, not a page
 
 **Quiz & Exam Mode**
+
+![quiz mode demo](assets/demo.gif)
+
 - `quiz` — weighted practice across all sections; questions you miss appear more often
   - Interactive section picker, or target with `-s` and control length with `-c`
 - `exam` — full 100-question timed exam simulation with pass/honours feedback
@@ -26,7 +32,19 @@ Built for people who want to actually understand the RF engineering — not just
 
 ## Installation
 
-**Prerequisites:** Rust toolchain (`rustup.rs`)
+### Prebuilt binary (no Rust required)
+
+Download the latest release for your platform from the [Releases page](https://github.com/gordcurrie/hamrs-ca/releases) and place the `hamrs` binary somewhere on your PATH.
+
+### Install with Cargo
+
+```bash
+cargo install --git https://github.com/gordcurrie/hamrs-ca
+```
+
+Requires the [Rust toolchain](https://rustup.rs). The binary installs to `~/.cargo/bin/hamrs`.
+
+### Build from source
 
 ```bash
 git clone https://github.com/gordcurrie/hamrs-ca
@@ -34,7 +52,9 @@ cd hamrs-ca
 cargo build --release
 ```
 
-The binary is at `target/release/hamrs`. Add it to your PATH or run it directly.
+The binary is at `target/release/hamrs`.
+
+---
 
 The question bank (984 questions from the ISED public-domain database) is compiled into the binary — no data files to manage.
 

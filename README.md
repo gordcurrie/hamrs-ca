@@ -4,13 +4,14 @@ A Rust CLI study tool for the **Canadian Amateur Radio Basic Qualification** exa
 
 Built for people who want to actually understand the RF engineering — not just memorize answers and forget them. The tool has two distinct modes that reflect the nature of the material: conceptual depth for technical topics, and efficient drilling for regulations and procedures.
 
-![hamrs-ca demo](assets/demo.gif)
-
 ---
 
 ## Features
 
 **Learn Mode** (AI powered)
+
+![concept mode demo](assets/demo-concept.gif)
+
 - Browse all 8 sections by topic
 - Engineering-depth explanations — signal physics, circuit behaviour, propagation mechanics
 - Regulations covered with context and rationale, not just rules
@@ -18,6 +19,9 @@ Built for people who want to actually understand the RF engineering — not just
 - Follow-up questions supported — it's a conversation, not a page
 
 **Quiz & Exam Mode**
+
+![quiz mode demo](assets/demo.gif)
+
 - `quiz` — weighted practice across all sections; questions you miss appear more often
   - Interactive section picker, or target with `-s` and control length with `-c`
 - `exam` — full 100-question timed exam simulation with pass/honours feedback

@@ -196,8 +196,29 @@ impl Db {
 }
 
 fn db_path() -> Result<PathBuf> {
-    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    Ok(base.join("hamrs-ca").join("progress.db"))
+    // Explicit XDG_DATA_HOME always wins — no migration fallback.
+    if let Some(xdg) = std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
+        return Ok(PathBuf::from(xdg).join("hamrs-ca").join("progress.db"));
+    }
+
+    let default_base = dirs::home_dir()
+        .map(|h| h.join(".local").join("share"))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let new_path = default_base.join("hamrs-ca").join("progress.db");
+
+    // Migration: if new path doesn't exist but old platform-native path does,
+    // keep using old location so existing progress isn't silently lost.
+    if !new_path.exists() {
+        if let Some(old_path) =
+            dirs::data_local_dir().map(|d| d.join("hamrs-ca").join("progress.db"))
+        {
+            if old_path != new_path && old_path.exists() {
+                return Ok(old_path);
+            }
+        }
+    }
+
+    Ok(new_path)
 }
 
 fn unix_now() -> i64 {
@@ -220,6 +241,63 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, val: impl AsRef<std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, val);
+            Self { key, prev }
+        }
+        fn remove(key: &'static str) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn db_path_uses_xdg_data_home_override() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _env = EnvGuard::set("XDG_DATA_HOME", tmp.path());
+        let path = db_path().unwrap();
+        assert_eq!(path, tmp.path().join("hamrs-ca").join("progress.db"));
+    }
+
+    #[test]
+    fn db_path_empty_xdg_data_home_falls_back_to_home() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set("XDG_DATA_HOME", "");
+        let path = db_path().unwrap();
+        assert!(path.ends_with("hamrs-ca/progress.db"));
+        if let Some(home) = dirs::home_dir() {
+            assert!(path.is_absolute());
+            assert!(path.starts_with(home.join(".local").join("share")) || path.starts_with(&home));
+        }
+    }
+
+    #[test]
+    fn db_path_unset_uses_home_local_share() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::remove("XDG_DATA_HOME");
+        let path = db_path().unwrap();
+        assert!(path.ends_with("hamrs-ca/progress.db"));
+        if dirs::home_dir().is_some() {
+            assert!(path.is_absolute());
+        }
+    }
 
     fn stats(attempts: u32, correct: u32) -> QuestionStats {
         QuestionStats {

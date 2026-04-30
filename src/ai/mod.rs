@@ -31,10 +31,15 @@ struct HamrsConfig {
 }
 
 fn config_path() -> std::path::PathBuf {
-    dirs::config_local_dir()
+    xdg_config_dir().join("hamrs-ca").join("config.toml")
+}
+
+fn xdg_config_dir() -> std::path::PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|p| !p.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
         .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("hamrs-ca")
-        .join("config.toml")
 }
 
 fn load_config() -> HamrsConfig {
@@ -306,6 +311,43 @@ fn ensure_config_exists() {
 }
 
 fn ensure_config_at(path: &std::path::Path) {
+    if path.exists() {
+        return;
+    }
+
+    // Migrate from old platform-native location so existing API keys aren't lost on upgrade.
+    if let Some(old_path) = dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("config.toml"))
+    {
+        if old_path != path && old_path.exists() {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            // create_new is atomic — prevents overwriting a file created by a racing process.
+            use std::io::Write;
+            if let Ok(mut dest) = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
+                let migrated = std::fs::read(&old_path)
+                    .ok()
+                    .and_then(|bytes| dest.write_all(&bytes).ok())
+                    .is_some();
+                if migrated {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = dest.set_permissions(std::fs::Permissions::from_mode(0o600));
+                    }
+                    return;
+                }
+                // Copy failed — remove the partial file so the example config can be written.
+                drop(dest);
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+
     if let Some(dir) = path.parent() {
         if let Err(err) = std::fs::create_dir_all(dir) {
             eprintln!(
@@ -350,17 +392,85 @@ fn ensure_config_at(path: &std::path::Path) {
 }
 
 fn load_system_prompt() -> String {
-    let config_path = dirs::config_local_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("hamrs-ca")
-        .join("system_prompt.md");
-
-    std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+    let new_path = xdg_config_dir().join("hamrs-ca").join("system_prompt.md");
+    if new_path.exists() {
+        if let Ok(s) = std::fs::read_to_string(&new_path) {
+            return s;
+        }
+    }
+    // Fallback: check old platform-native location for existing customizations
+    if let Some(old_path) =
+        dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("system_prompt.md"))
+    {
+        if old_path != new_path {
+            if let Ok(s) = std::fs::read_to_string(&old_path) {
+                return s;
+            }
+        }
+    }
+    DEFAULT_SYSTEM_PROMPT.to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, val: impl AsRef<std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, val);
+            Self { key, prev }
+        }
+        fn remove(key: &'static str) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn xdg_config_dir_uses_override() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _env = EnvGuard::set("XDG_CONFIG_HOME", tmp.path());
+        assert_eq!(xdg_config_dir(), tmp.path());
+    }
+
+    #[test]
+    fn xdg_config_dir_empty_override_falls_back_to_home() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set("XDG_CONFIG_HOME", "");
+        let result = xdg_config_dir();
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(result, home.join(".config"));
+        } else {
+            assert_eq!(result, std::path::PathBuf::from("."));
+        }
+    }
+
+    #[test]
+    fn xdg_config_dir_unset_falls_back_to_home() {
+        let _lock = crate::ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::remove("XDG_CONFIG_HOME");
+        let result = xdg_config_dir();
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(result, home.join(".config"));
+        } else {
+            assert_eq!(result, std::path::PathBuf::from("."));
+        }
+    }
 
     #[test]
     fn config_defaults_to_none_when_file_missing() {

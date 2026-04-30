@@ -116,7 +116,7 @@ OLLAMA_HOST=http://192.168.1.10:11434 hamrs concept
 
 ### Option B — Anthropic API
 
-`hamrs` automatically creates a commented-out `config.toml` on first run. The path is platform-dependent (`~/.config/hamrs-ca/config.toml` on Linux, `~/Library/Application Support/hamrs-ca/config.toml` on macOS). Open it and uncomment your API key:
+`hamrs` automatically creates a commented-out `config.toml` on first run at `~/.config/hamrs-ca/config.toml` (or `$XDG_CONFIG_HOME/hamrs-ca/config.toml` if set). Open it and uncomment your API key:
 
 ```toml
 anthropic_api_key = "sk-ant-..."
@@ -169,7 +169,7 @@ The exam questions are sourced from the ISED [Amateur Radio Operator Certificate
 
 Session history and per-question accuracy are stored in a local SQLite database:
 
-- **macOS/Linux:** `~/.local/share/hamrs-ca/progress.db`
+- **All platforms:** `~/.local/share/hamrs-ca/progress.db` (or `$XDG_DATA_HOME/hamrs-ca/progress.db` if set)
 
 The weighting algorithm surfaces questions you miss more often: answered correctly 90%+ → weight 1 (rare), never seen → weight 3, consistently missed → weight 4 (frequent).
 

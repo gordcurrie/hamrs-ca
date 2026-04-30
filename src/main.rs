@@ -5,6 +5,12 @@ mod modes;
 mod questions;
 mod tui;
 
+/// Shared lock for tests that mutate process-wide environment variables.
+/// A single crate-wide mutex prevents cross-module races that per-module
+/// locks cannot guard against.
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 use ai::ConceptClient;
 
 use anyhow::Result;

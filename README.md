@@ -169,7 +169,7 @@ The exam questions are sourced from the ISED [Amateur Radio Operator Certificate
 
 Session history and per-question accuracy are stored in a local SQLite database:
 
-- **macOS/Linux:** `~/.local/share/hamrs-ca/progress.db` (or `$XDG_DATA_HOME/hamrs-ca/progress.db` if set)
+- **All platforms:** `~/.local/share/hamrs-ca/progress.db` (or `$XDG_DATA_HOME/hamrs-ca/progress.db` if set)
 
 The weighting algorithm surfaces questions you miss more often: answered correctly 90%+ → weight 1 (rare), never seen → weight 3, consistently missed → weight 4 (frequent).
 

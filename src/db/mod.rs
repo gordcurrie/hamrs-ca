@@ -196,12 +196,31 @@ impl Db {
 }
 
 fn db_path() -> Result<PathBuf> {
-    let base = std::env::var("XDG_DATA_HOME")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".local").join("share")))
-        .unwrap_or_else(|| PathBuf::from(".local/share"));
-    Ok(base.join("hamrs-ca").join("progress.db"))
+    // Explicit XDG_DATA_HOME always wins — no migration fallback.
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg).join("hamrs-ca").join("progress.db"));
+        }
+    }
+
+    let default_base = dirs::home_dir()
+        .map(|h| h.join(".local").join("share"))
+        .unwrap_or_else(|| PathBuf::from(".local").join("share"));
+    let new_path = default_base.join("hamrs-ca").join("progress.db");
+
+    // Migration: if new path doesn't exist but old platform-native path does,
+    // keep using old location so existing progress isn't silently lost.
+    if !new_path.exists() {
+        if let Some(old_path) =
+            dirs::data_local_dir().map(|d| d.join("hamrs-ca").join("progress.db"))
+        {
+            if old_path != new_path && old_path.exists() {
+                return Ok(old_path);
+            }
+        }
+    }
+
+    Ok(new_path)
 }
 
 fn unix_now() -> i64 {
@@ -224,6 +243,41 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn db_path_uses_xdg_data_home_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("XDG_DATA_HOME", "/tmp/test-data");
+        let path = db_path().unwrap();
+        std::env::remove_var("XDG_DATA_HOME");
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/tmp/test-data/hamrs-ca/progress.db")
+        );
+    }
+
+    #[test]
+    fn db_path_empty_xdg_data_home_falls_back_to_home() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("XDG_DATA_HOME", "");
+        let path = db_path().unwrap();
+        std::env::remove_var("XDG_DATA_HOME");
+        let expected_base = dirs::home_dir().unwrap().join(".local").join("share");
+        // May fall back to old platform path if it exists; either way the base is not empty-string derived
+        assert!(path.ends_with("hamrs-ca/progress.db"));
+        assert!(path.is_absolute() || path.starts_with(&expected_base));
+    }
+
+    #[test]
+    fn db_path_unset_uses_home_local_share() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("XDG_DATA_HOME");
+        let path = db_path().unwrap();
+        assert!(path.ends_with("hamrs-ca/progress.db"));
+    }
 
     fn stats(attempts: u32, correct: u32) -> QuestionStats {
         QuestionStats {

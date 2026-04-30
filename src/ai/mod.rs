@@ -37,6 +37,7 @@ fn config_path() -> std::path::PathBuf {
 fn xdg_config_dir() -> std::path::PathBuf {
     std::env::var("XDG_CONFIG_HOME")
         .ok()
+        .filter(|p| !p.is_empty())
         .map(std::path::PathBuf::from)
         .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
         .unwrap_or_else(|| std::path::PathBuf::from(".config"))
@@ -363,6 +364,37 @@ fn load_system_prompt() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn xdg_config_dir_uses_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", "/tmp/test-cfg");
+        let result = xdg_config_dir();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        assert_eq!(result, std::path::PathBuf::from("/tmp/test-cfg"));
+    }
+
+    #[test]
+    fn xdg_config_dir_empty_override_falls_back_to_home() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", "");
+        let result = xdg_config_dir();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let expected = dirs::home_dir().unwrap().join(".config");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn xdg_config_dir_unset_falls_back_to_home() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let result = xdg_config_dir();
+        let expected = dirs::home_dir().unwrap().join(".config");
+        assert_eq!(result, expected);
+    }
 
     #[test]
     fn config_defaults_to_none_when_file_missing() {

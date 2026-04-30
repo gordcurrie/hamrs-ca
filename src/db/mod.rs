@@ -205,7 +205,7 @@ fn db_path() -> Result<PathBuf> {
 
     let default_base = dirs::home_dir()
         .map(|h| h.join(".local").join("share"))
-        .unwrap_or_else(|| PathBuf::from(".local").join("share"));
+        .unwrap_or_else(|| PathBuf::from("."));
     let new_path = default_base.join("hamrs-ca").join("progress.db");
 
     // Migration: if new path doesn't exist but old platform-native path does,
@@ -250,13 +250,11 @@ mod tests {
     #[test]
     fn db_path_uses_xdg_data_home_override() {
         let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("XDG_DATA_HOME", "/tmp/test-data");
+        let tmp = std::env::temp_dir().join("hamrs-test-data");
+        std::env::set_var("XDG_DATA_HOME", &tmp);
         let path = db_path().unwrap();
         std::env::remove_var("XDG_DATA_HOME");
-        assert_eq!(
-            path,
-            std::path::PathBuf::from("/tmp/test-data/hamrs-ca/progress.db")
-        );
+        assert_eq!(path, tmp.join("hamrs-ca").join("progress.db"));
     }
 
     #[test]
@@ -265,10 +263,13 @@ mod tests {
         std::env::set_var("XDG_DATA_HOME", "");
         let path = db_path().unwrap();
         std::env::remove_var("XDG_DATA_HOME");
-        let expected_base = dirs::home_dir().unwrap().join(".local").join("share");
-        // May fall back to old platform path if it exists; either way the base is not empty-string derived
         assert!(path.ends_with("hamrs-ca/progress.db"));
-        assert!(path.is_absolute() || path.starts_with(&expected_base));
+        if let Some(home) = dirs::home_dir() {
+            let expected_base = home.join(".local").join("share");
+            // May use migration fallback path; either way must be absolute
+            assert!(path.is_absolute());
+            assert!(path.starts_with(&expected_base) || path.starts_with(&home));
+        }
     }
 
     #[test]
@@ -277,6 +278,9 @@ mod tests {
         std::env::remove_var("XDG_DATA_HOME");
         let path = db_path().unwrap();
         assert!(path.ends_with("hamrs-ca/progress.db"));
+        if dirs::home_dir().is_some() {
+            assert!(path.is_absolute());
+        }
     }
 
     fn stats(attempts: u32, correct: u32) -> QuestionStats {

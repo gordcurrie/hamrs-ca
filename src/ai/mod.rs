@@ -40,11 +40,21 @@ fn xdg_config_dir() -> std::path::PathBuf {
         .filter(|p| !p.is_empty())
         .map(std::path::PathBuf::from)
         .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
-        .unwrap_or_else(|| std::path::PathBuf::from(".config"))
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
 }
 
 fn load_config() -> HamrsConfig {
-    load_config_from(&config_path())
+    let new_path = config_path();
+    if !new_path.exists() {
+        if let Some(old_path) =
+            dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("config.toml"))
+        {
+            if old_path != new_path && old_path.exists() {
+                return load_config_from(&old_path);
+            }
+        }
+    }
+    load_config_from(&new_path)
 }
 
 fn load_config_from(path: &std::path::Path) -> HamrsConfig {
@@ -356,9 +366,23 @@ fn ensure_config_at(path: &std::path::Path) {
 }
 
 fn load_system_prompt() -> String {
-    let config_path = xdg_config_dir().join("hamrs-ca").join("system_prompt.md");
-
-    std::fs::read_to_string(&config_path).unwrap_or_else(|_| DEFAULT_SYSTEM_PROMPT.to_string())
+    let new_path = xdg_config_dir().join("hamrs-ca").join("system_prompt.md");
+    if new_path.exists() {
+        if let Ok(s) = std::fs::read_to_string(&new_path) {
+            return s;
+        }
+    }
+    // Fallback: check old platform-native location for existing customizations
+    if let Some(old_path) =
+        dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("system_prompt.md"))
+    {
+        if old_path != new_path {
+            if let Ok(s) = std::fs::read_to_string(&old_path) {
+                return s;
+            }
+        }
+    }
+    DEFAULT_SYSTEM_PROMPT.to_string()
 }
 
 #[cfg(test)]
@@ -371,10 +395,11 @@ mod tests {
     #[test]
     fn xdg_config_dir_uses_override() {
         let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", "/tmp/test-cfg");
+        let tmp = std::env::temp_dir().join("hamrs-test-cfg");
+        std::env::set_var("XDG_CONFIG_HOME", &tmp);
         let result = xdg_config_dir();
         std::env::remove_var("XDG_CONFIG_HOME");
-        assert_eq!(result, std::path::PathBuf::from("/tmp/test-cfg"));
+        assert_eq!(result, tmp);
     }
 
     #[test]
@@ -383,8 +408,11 @@ mod tests {
         std::env::set_var("XDG_CONFIG_HOME", "");
         let result = xdg_config_dir();
         std::env::remove_var("XDG_CONFIG_HOME");
-        let expected = dirs::home_dir().unwrap().join(".config");
-        assert_eq!(result, expected);
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(result, home.join(".config"));
+        } else {
+            assert_eq!(result, std::path::PathBuf::from("."));
+        }
     }
 
     #[test]
@@ -392,8 +420,11 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("XDG_CONFIG_HOME");
         let result = xdg_config_dir();
-        let expected = dirs::home_dir().unwrap().join(".config");
-        assert_eq!(result, expected);
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(result, home.join(".config"));
+        } else {
+            assert_eq!(result, std::path::PathBuf::from("."));
+        }
     }
 
     #[test]

@@ -35,8 +35,7 @@ fn config_path() -> std::path::PathBuf {
 }
 
 fn xdg_config_dir() -> std::path::PathBuf {
-    std::env::var("XDG_CONFIG_HOME")
-        .ok()
+    std::env::var_os("XDG_CONFIG_HOME")
         .filter(|p| !p.is_empty())
         .map(std::path::PathBuf::from)
         .or_else(|| dirs::home_dir().map(|h| h.join(".config")))
@@ -44,17 +43,7 @@ fn xdg_config_dir() -> std::path::PathBuf {
 }
 
 fn load_config() -> HamrsConfig {
-    let new_path = config_path();
-    if !new_path.exists() {
-        if let Some(old_path) =
-            dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("config.toml"))
-        {
-            if old_path != new_path && old_path.exists() {
-                return load_config_from(&old_path);
-            }
-        }
-    }
-    load_config_from(&new_path)
+    load_config_from(&config_path())
 }
 
 fn load_config_from(path: &std::path::Path) -> HamrsConfig {
@@ -322,6 +311,30 @@ fn ensure_config_exists() {
 }
 
 fn ensure_config_at(path: &std::path::Path) {
+    if path.exists() {
+        return;
+    }
+
+    // Migrate from old platform-native location so existing API keys aren't lost on upgrade.
+    if let Some(old_path) = dirs::config_local_dir().map(|d| d.join("hamrs-ca").join("config.toml"))
+    {
+        if old_path != path && old_path.exists() {
+            if let Some(dir) = path.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if std::fs::copy(&old_path, path).is_ok() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(f) = std::fs::File::open(path) {
+                        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+                    }
+                }
+                return;
+            }
+        }
+    }
+
     if let Some(dir) = path.parent() {
         if let Err(err) = std::fs::create_dir_all(dir) {
             eprintln!(
@@ -392,22 +405,44 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, val: impl AsRef<std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, val);
+            Self { key, prev }
+        }
+        fn remove(key: &'static str) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
     #[test]
     fn xdg_config_dir_uses_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let tmp = std::env::temp_dir().join("hamrs-test-cfg");
-        std::env::set_var("XDG_CONFIG_HOME", &tmp);
-        let result = xdg_config_dir();
-        std::env::remove_var("XDG_CONFIG_HOME");
-        assert_eq!(result, tmp);
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _env = EnvGuard::set("XDG_CONFIG_HOME", tmp.path());
+        assert_eq!(xdg_config_dir(), tmp.path());
     }
 
     #[test]
     fn xdg_config_dir_empty_override_falls_back_to_home() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("XDG_CONFIG_HOME", "");
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set("XDG_CONFIG_HOME", "");
         let result = xdg_config_dir();
-        std::env::remove_var("XDG_CONFIG_HOME");
         if let Some(home) = dirs::home_dir() {
             assert_eq!(result, home.join(".config"));
         } else {
@@ -417,8 +452,8 @@ mod tests {
 
     #[test]
     fn xdg_config_dir_unset_falls_back_to_home() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        std::env::remove_var("XDG_CONFIG_HOME");
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::remove("XDG_CONFIG_HOME");
         let result = xdg_config_dir();
         if let Some(home) = dirs::home_dir() {
             assert_eq!(result, home.join(".config"));

@@ -197,10 +197,8 @@ impl Db {
 
 fn db_path() -> Result<PathBuf> {
     // Explicit XDG_DATA_HOME always wins — no migration fallback.
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            return Ok(PathBuf::from(xdg).join("hamrs-ca").join("progress.db"));
-        }
+    if let Some(xdg) = std::env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty()) {
+        return Ok(PathBuf::from(xdg).join("hamrs-ca").join("progress.db"));
     }
 
     let default_base = dirs::home_dir()
@@ -247,35 +245,56 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, val: impl AsRef<std::ffi::OsStr>) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::set_var(key, val);
+            Self { key, prev }
+        }
+        fn remove(key: &'static str) -> Self {
+            let prev = std::env::var_os(key);
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
     #[test]
     fn db_path_uses_xdg_data_home_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let tmp = std::env::temp_dir().join("hamrs-test-data");
-        std::env::set_var("XDG_DATA_HOME", &tmp);
+        let _lock = ENV_LOCK.lock().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let _env = EnvGuard::set("XDG_DATA_HOME", tmp.path());
         let path = db_path().unwrap();
-        std::env::remove_var("XDG_DATA_HOME");
-        assert_eq!(path, tmp.join("hamrs-ca").join("progress.db"));
+        assert_eq!(path, tmp.path().join("hamrs-ca").join("progress.db"));
     }
 
     #[test]
     fn db_path_empty_xdg_data_home_falls_back_to_home() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("XDG_DATA_HOME", "");
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::set("XDG_DATA_HOME", "");
         let path = db_path().unwrap();
-        std::env::remove_var("XDG_DATA_HOME");
         assert!(path.ends_with("hamrs-ca/progress.db"));
         if let Some(home) = dirs::home_dir() {
-            let expected_base = home.join(".local").join("share");
-            // May use migration fallback path; either way must be absolute
             assert!(path.is_absolute());
-            assert!(path.starts_with(&expected_base) || path.starts_with(&home));
+            assert!(path.starts_with(home.join(".local").join("share")) || path.starts_with(&home));
         }
     }
 
     #[test]
     fn db_path_unset_uses_home_local_share() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        std::env::remove_var("XDG_DATA_HOME");
+        let _lock = ENV_LOCK.lock().unwrap();
+        let _env = EnvGuard::remove("XDG_DATA_HOME");
         let path = db_path().unwrap();
         assert!(path.ends_with("hamrs-ca/progress.db"));
         if dirs::home_dir().is_some() {

@@ -322,15 +322,28 @@ fn ensure_config_at(path: &std::path::Path) {
             if let Some(dir) = path.parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            if std::fs::copy(&old_path, path).is_ok() {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(f) = std::fs::File::open(path) {
-                        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
+            // create_new is atomic — prevents overwriting a file created by a racing process.
+            use std::io::Write;
+            if let Ok(mut dest) = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path)
+            {
+                let migrated = std::fs::read(&old_path)
+                    .ok()
+                    .and_then(|bytes| dest.write_all(&bytes).ok())
+                    .is_some();
+                if migrated {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = dest.set_permissions(std::fs::Permissions::from_mode(0o600));
                     }
+                    return;
                 }
-                return;
+                // Copy failed — remove the partial file so the example config can be written.
+                drop(dest);
+                let _ = std::fs::remove_file(path);
             }
         }
     }
@@ -401,9 +414,6 @@ fn load_system_prompt() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct EnvGuard {
         key: &'static str,
@@ -432,7 +442,7 @@ mod tests {
 
     #[test]
     fn xdg_config_dir_uses_override() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let _env = EnvGuard::set("XDG_CONFIG_HOME", tmp.path());
         assert_eq!(xdg_config_dir(), tmp.path());
@@ -440,7 +450,7 @@ mod tests {
 
     #[test]
     fn xdg_config_dir_empty_override_falls_back_to_home() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let _env = EnvGuard::set("XDG_CONFIG_HOME", "");
         let result = xdg_config_dir();
         if let Some(home) = dirs::home_dir() {
@@ -452,7 +462,7 @@ mod tests {
 
     #[test]
     fn xdg_config_dir_unset_falls_back_to_home() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let _env = EnvGuard::remove("XDG_CONFIG_HOME");
         let result = xdg_config_dir();
         if let Some(home) = dirs::home_dir() {

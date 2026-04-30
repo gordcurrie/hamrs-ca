@@ -241,9 +241,6 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct EnvGuard {
         key: &'static str,
@@ -272,7 +269,7 @@ mod tests {
 
     #[test]
     fn db_path_uses_xdg_data_home_override() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let _env = EnvGuard::set("XDG_DATA_HOME", tmp.path());
         let path = db_path().unwrap();
@@ -281,7 +278,7 @@ mod tests {
 
     #[test]
     fn db_path_empty_xdg_data_home_falls_back_to_home() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let _env = EnvGuard::set("XDG_DATA_HOME", "");
         let path = db_path().unwrap();
         assert!(path.ends_with("hamrs-ca/progress.db"));
@@ -293,7 +290,7 @@ mod tests {
 
     #[test]
     fn db_path_unset_uses_home_local_share() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::ENV_LOCK.lock().unwrap();
         let _env = EnvGuard::remove("XDG_DATA_HOME");
         let path = db_path().unwrap();
         assert!(path.ends_with("hamrs-ca/progress.db"));

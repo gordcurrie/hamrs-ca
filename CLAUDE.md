@@ -14,6 +14,16 @@ cargo fmt --check                  # format check (CI enforces this)
 cargo fmt                          # auto-format
 ```
 
+## Before opening a PR
+
+Run all three CI checks and fix any failures before pushing:
+
+```bash
+cargo fmt
+cargo clippy -- -D warnings
+cargo test
+```
+
 ## Architecture
 
 ### Compile-time data embedding

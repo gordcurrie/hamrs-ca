@@ -24,27 +24,29 @@ pub async fn run(bank: &QuestionBank, db: &Db) -> Result<()> {
 
     let mut visited = db.get_visited_concepts()?;
 
-    loop {
+    'sections: loop {
         let Some(section) = pick_section(bank, &visited)? else {
             break;
         };
 
-        let Some((subsection, hint)) = pick_subsection(bank, db, section, &mut visited)? else {
-            continue;
-        };
+        loop {
+            let Some((subsection, hint)) = pick_subsection(bank, db, section, &mut visited)? else {
+                continue 'sections;
+            };
 
-        if !run_topic_session(
-            bank,
-            db,
-            section,
-            subsection,
-            &hint,
-            ai_available,
-            &mut visited,
-        )
-        .await?
-        {
-            break;
+            if !run_topic_session(
+                bank,
+                db,
+                section,
+                subsection,
+                &hint,
+                ai_available,
+                &mut visited,
+            )
+            .await?
+            {
+                break 'sections;
+            }
         }
     }
 
@@ -133,15 +135,14 @@ fn pick_subsection(
         println!();
         for (i, (sub, count, hint)) in subsections.iter().enumerate() {
             let key = format!("B-{section:03}-{sub:03}");
-            let check = if visited.contains(&key) {
-                " \x1b[32m✓\x1b[0m"
+            if visited.contains(&key) {
+                println!(
+                    "\x1b[32m  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q)  ✓\x1b[0m",
+                    i + 1
+                );
             } else {
-                ""
-            };
-            println!(
-                "  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q){check}",
-                i + 1
-            );
+                println!("  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q)", i + 1);
+            }
         }
         println!();
         print!("  Topic number, r to reset progress, or b to go back: ");

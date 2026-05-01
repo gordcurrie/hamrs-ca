@@ -28,8 +28,8 @@ The question bank is embedded via `include_str!`; the content map is embedded vi
 ### Module responsibilities
 
 - **`src/questions/mod.rs`** — `QuestionBank` loads the embedded JSON and exposes iterators by section and subsection. Question IDs use the format `B-SSS-SSS-QQQ`.
-- **`src/db/mod.rs`** — SQLite via rusqlite. Database lives at `~/.local/share/hamrs-ca/progress.db` (respects `$XDG_DATA_HOME`). Three tables: `sessions`, `attempts`, `concept_progress`. `QuestionStats::weight()` is the spaced-repetition core: unseen → 3, ≥90% → 1, ≥60% → 2, <60% → 4.
-- **`src/ai/mod.rs`** — `ConceptClient` abstracts two backends: Anthropic API and Ollama. Anthropic takes priority when `anthropic_api_key` is set in the config file or via `$HAMRS_ANTHROPIC_API_KEY`. Falls back to Ollama at `localhost:11434`. Config file is written on first run (commented-out template, `chmod 600`). Config path resolves as: `$XDG_CONFIG_HOME/hamrs-ca/config.toml` → `~/.config/hamrs-ca/config.toml` → `.`.
+- **`src/db/mod.rs`** — SQLite via rusqlite. Database path resolves as: `$XDG_DATA_HOME/hamrs-ca/progress.db` → `~/.local/share/hamrs-ca/progress.db` → `.` (if home unavailable). On first run with a new path, if the old `dirs::data_local_dir()` path exists, it keeps using the old location to avoid silently losing progress. Three tables: `sessions`, `attempts`, `concept_progress`. `QuestionStats::weight()` is the spaced-repetition core: unseen → 3, ≥90% → 1, ≥60% → 2, <60% → 4.
+- **`src/ai/mod.rs`** — `ConceptClient` abstracts two backends: Anthropic API and Ollama. Anthropic takes priority when `anthropic_api_key` is set in the config file or via `$HAMRS_ANTHROPIC_API_KEY`. Falls back to Ollama at `http://localhost:11434`. Config file is written on first run (commented-out template, `chmod 600`). Config path resolves as: `$XDG_CONFIG_HOME/hamrs-ca/config.toml` → `~/.config/hamrs-ca/config.toml` → `.`.
 - **`src/modes/exam.rs`** — Builds `QuizSession` values. `weighted_sample` shuffles a weight-expanded index pool then deduplicates, giving higher-weight questions a proportionally better chance of appearing.
 - **`src/modes/concept.rs`** — Interactive learn mode. For each subsection key (e.g., `B-005-002`), it checks `get_pregenerated_content` first. If found, content is printed immediately with no API call; the pre-generated text is also injected as the assistant turn so follow-up questions have context. Falls back to a live AI call if no pre-generated content exists.
 - **`src/tui/quiz.rs`** — ratatui + crossterm terminal UI for quiz and exam sessions.
@@ -41,7 +41,7 @@ Files in `content/` are named by subsection key (e.g., `content/B-005-002.md`) a
 
 ### UX mode split
 
-Concept mode (`hamrs concept`) uses plain `stdin.read_line()` — no ratatui. Quiz and exam modes use the full ratatui TUI. This distinction matters when touching I/O code: concept mode reads from `stdin` directly; quiz mode uses crossterm events.
+Concept mode (`hamrs concept`) uses plain `stdin.read_line()` throughout — no ratatui. Quiz and exam modes use the ratatui TUI for the question screen, but the section-picker prompt in `modes/exam::pick_sections()` also uses plain `stdin.read_line()` before the TUI starts. Both I/O paths need to stay correct when touching input handling.
 
 ### Code conventions
 

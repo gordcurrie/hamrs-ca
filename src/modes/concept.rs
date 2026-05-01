@@ -141,10 +141,7 @@ fn pick_subsection(
                     i + 1
                 );
             } else {
-                println!(
-                    "  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q)",
-                    i + 1
-                );
+                println!("  {:2}.  [{section}-{sub:03}]  {hint}  ({count}q)", i + 1);
             }
         }
         println!();

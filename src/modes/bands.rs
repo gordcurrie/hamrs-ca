@@ -175,11 +175,11 @@ fn question_matches_band(q: &crate::questions::Question, band: &Band) -> bool {
     })
 }
 
-// Single pass through the question bank: returns one sorted subsection list per band.
-fn compute_all_refs(bank: &QuestionBank) -> Vec<Vec<String>> {
+// Single pass through questions: returns one sorted subsection list per band.
+fn compute_all_refs(questions: &[crate::questions::Question]) -> Vec<Vec<String>> {
     let mut sets: Vec<HashSet<String>> = (0..BANDS.len()).map(|_| HashSet::new()).collect();
 
-    for q in bank.all() {
+    for q in questions {
         let key = format!("B-{:03}-{:03}", q.section, q.subsection);
         for (i, band) in BANDS.iter().enumerate() {
             if question_matches_band(q, band) {
@@ -198,7 +198,7 @@ fn compute_all_refs(bank: &QuestionBank) -> Vec<Vec<String>> {
 }
 
 pub fn run(bank: &QuestionBank) {
-    let refs = compute_all_refs(bank);
+    let refs = compute_all_refs(bank.all());
     println!();
     println!("  \x1b[1mAmateur Radio Bands — Canadian Basic Qualification\x1b[0m");
     println!();
@@ -241,7 +241,8 @@ fn print_spectrum() {
         };
 
         let bar = format!("{color}[{}]{reset}", "─".repeat(inner));
-        let pad_right = " ".repeat(CHART_COLS.saturating_sub(end));
+        // +1 so each bar line is CHART_COLS+1 chars wide, matching the ruler (0..=CHART_COLS).
+        let pad_right = " ".repeat((CHART_COLS + 1).saturating_sub(end));
 
         let badge = match band.status {
             Status::Primary => "\x1b[32m[1°]\x1b[0m",
@@ -382,15 +383,29 @@ mod tests {
     }
 
     #[test]
+    fn compute_all_refs_returns_one_entry_per_band() {
+        let refs = compute_all_refs(&[]);
+        assert_eq!(refs.len(), BANDS.len());
+        for band_refs in &refs {
+            assert!(band_refs.is_empty());
+        }
+    }
+
+    #[test]
     fn compute_all_refs_deduplicates_and_sorts() {
-        // QuestionBank can't be constructed in tests, so verify the dedup/sort
-        // logic directly: same key inserted twice should appear once, sorted.
-        let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
-        set.insert("B-001-010".to_string());
-        set.insert("B-001-010".to_string());
-        set.insert("B-001-015".to_string());
-        let mut v: Vec<String> = set.into_iter().collect();
-        v.sort();
-        assert_eq!(v, vec!["B-001-010", "B-001-015"]);
+        // Two questions in the same subsection, both mentioning 70cm → one deduplicated ref.
+        let q1 = make_question(1, 10, "Covers 430 MHz to 450 MHz?", "70cm", ["a", "b", "c"]);
+        let q2 = make_question(
+            1,
+            10,
+            "Secondary: 430 MHz to 450 MHz",
+            "yes",
+            ["a", "b", "c"],
+        );
+        // A different subsection to confirm sorting.
+        let q3 = make_question(1, 5, "430 MHz to 450 MHz again", "yes", ["a", "b", "c"]);
+        let refs = compute_all_refs(&[q1, q2, q3]);
+        let idx = BANDS.iter().position(|b| b.name == "70cm").unwrap();
+        assert_eq!(refs[idx], vec!["B-001-005", "B-001-010"]);
     }
 }

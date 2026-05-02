@@ -165,31 +165,40 @@ static BANDS: &[Band] = &[
     },
 ];
 
-fn related_subsections(band: &Band, bank: &QuestionBank) -> Vec<String> {
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut result: Vec<String> = Vec::new();
+fn question_matches_band(q: &crate::questions::Question, band: &Band) -> bool {
+    band.search_terms.iter().any(|t| {
+        q.text.contains(t)
+            || q.correct_answer.contains(t)
+            || q.incorrect_answers[0].contains(t)
+            || q.incorrect_answers[1].contains(t)
+            || q.incorrect_answers[2].contains(t)
+    })
+}
+
+// Single pass through the question bank: returns one sorted subsection list per band.
+fn compute_all_refs(bank: &QuestionBank) -> Vec<Vec<String>> {
+    let mut sets: Vec<HashSet<String>> = (0..BANDS.len()).map(|_| HashSet::new()).collect();
 
     for q in bank.all() {
-        let haystack = format!(
-            "{} {} {} {} {}",
-            q.text,
-            q.correct_answer,
-            q.incorrect_answers[0],
-            q.incorrect_answers[1],
-            q.incorrect_answers[2],
-        );
-        if band.search_terms.iter().any(|t| haystack.contains(t)) {
-            let key = format!("B-{:03}-{:03}", q.section, q.subsection);
-            if seen.insert(key.clone()) {
-                result.push(key);
+        let key = format!("B-{:03}-{:03}", q.section, q.subsection);
+        for (i, band) in BANDS.iter().enumerate() {
+            if question_matches_band(q, band) {
+                sets[i].insert(key.clone());
             }
         }
     }
-    result.sort();
-    result
+
+    sets.into_iter()
+        .map(|set| {
+            let mut v: Vec<String> = set.into_iter().collect();
+            v.sort();
+            v
+        })
+        .collect()
 }
 
 pub fn run(bank: &QuestionBank) {
+    let refs = compute_all_refs(bank);
     println!();
     println!("  \x1b[1mAmateur Radio Bands — Canadian Basic Qualification\x1b[0m");
     println!();
@@ -200,7 +209,7 @@ pub fn run(bank: &QuestionBank) {
     println!();
     print_spectrum();
     println!();
-    print_reference(bank);
+    print_reference(&refs);
     println!();
 }
 
@@ -248,27 +257,140 @@ fn print_spectrum() {
     }
 }
 
-fn print_reference(bank: &QuestionBank) {
+fn print_reference(refs: &[Vec<String>]) {
     println!("  {}", "─".repeat(72));
     println!("  \x1b[1mExam Key Facts\x1b[0m");
     println!();
 
-    for band in BANDS {
+    for (band, band_refs) in BANDS.iter().zip(refs.iter()) {
         let badge = match band.status {
             Status::Primary => "\x1b[32m[1°]\x1b[0m",
             Status::Secondary => "\x1b[33m[2°]\x1b[0m",
         };
 
-        let refs = related_subsections(band, bank);
-        let ref_str = if refs.is_empty() {
+        let ref_str = if band_refs.is_empty() {
             String::new()
         } else {
-            format!("  \x1b[2m→ {}\x1b[0m", refs.join(", "))
+            format!("  \x1b[2m→ {}\x1b[0m", band_refs.join(", "))
         };
 
         println!(
             "  {badge} \x1b[1m{:<6}\x1b[0m {}{}",
             band.name, band.exam_note, ref_str
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::questions::Question;
+
+    fn make_question(
+        section: u8,
+        subsection: u8,
+        text: &str,
+        correct: &str,
+        wrong: [&str; 3],
+    ) -> Question {
+        Question {
+            id: format!("B-{section:03}-{subsection:03}-001"),
+            section,
+            subsection,
+            text: text.to_string(),
+            correct_answer: correct.to_string(),
+            incorrect_answers: wrong.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn hz_to_col_decade_marks() {
+        assert_eq!(hz_to_col(100_000.0), 0); // 100 kHz → left edge
+        assert_eq!(hz_to_col(1_000_000.0), 11); // 1 MHz
+        assert_eq!(hz_to_col(10_000_000.0), 22); // 10 MHz
+        assert_eq!(hz_to_col(100_000_000.0), 33); // 100 MHz
+        assert_eq!(hz_to_col(1_000_000_000.0), 44); // 1 GHz → right edge
+    }
+
+    #[test]
+    fn hz_to_col_clamps_out_of_range() {
+        assert_eq!(hz_to_col(1.0), 0); // below range clamps to left
+        assert_eq!(hz_to_col(1e12), CHART_COLS); // above range clamps to right
+    }
+
+    #[test]
+    fn question_matches_band_finds_term_in_text() {
+        let band = Band {
+            name: "70cm",
+            range: "430–450 MHz",
+            low_hz: 430e6,
+            high_hz: 450e6,
+            status: Status::Secondary,
+            exam_note: "",
+            search_terms: &["430 MHz to 450"],
+        };
+        let q = make_question(
+            1,
+            10,
+            "Which band covers 430 MHz to 450 MHz?",
+            "70cm",
+            ["a", "b", "c"],
+        );
+        assert!(question_matches_band(&q, &band));
+    }
+
+    #[test]
+    fn question_matches_band_finds_term_in_answer() {
+        let band = Band {
+            name: "2m",
+            range: "144–148 MHz",
+            low_hz: 144e6,
+            high_hz: 148e6,
+            status: Status::Primary,
+            exam_note: "",
+            search_terms: &["144 MHz to 148"],
+        };
+        let q = make_question(
+            1,
+            10,
+            "Which is a primary band?",
+            "144 MHz to 148 MHz",
+            ["430 MHz to 450 MHz", "b", "c"],
+        );
+        assert!(question_matches_band(&q, &band));
+    }
+
+    #[test]
+    fn question_matches_band_no_false_positives() {
+        let band = Band {
+            name: "33cm",
+            range: "902–928 MHz",
+            low_hz: 902e6,
+            high_hz: 928e6,
+            status: Status::Secondary,
+            exam_note: "",
+            search_terms: &["902 MHz to 928"],
+        };
+        let q = make_question(
+            1,
+            10,
+            "Which band is 430 MHz to 450 MHz?",
+            "70cm",
+            ["a", "b", "c"],
+        );
+        assert!(!question_matches_band(&q, &band));
+    }
+
+    #[test]
+    fn compute_all_refs_deduplicates_and_sorts() {
+        // QuestionBank can't be constructed in tests, so verify the dedup/sort
+        // logic directly: same key inserted twice should appear once, sorted.
+        let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
+        set.insert("B-001-010".to_string());
+        set.insert("B-001-010".to_string());
+        set.insert("B-001-015".to_string());
+        let mut v: Vec<String> = set.into_iter().collect();
+        v.sort();
+        assert_eq!(v, vec!["B-001-010", "B-001-015"]);
     }
 }

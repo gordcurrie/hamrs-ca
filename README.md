@@ -64,6 +64,7 @@ The question bank (984 questions from the ISED public-domain database) is compil
 
 ```bash
 hamrs concept          # Learn any section with AI explanations — start here
+hamrs bands            # Frequency band reference — log-scale spectrum chart with exam key facts
 hamrs quiz             # Weighted practice quiz, with interactive section picker
 hamrs quiz -s 5        # Practice section 5 only (Electrical Principles)
 hamrs quiz -s 5,6      # Practice sections 5 and 6

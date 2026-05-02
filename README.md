@@ -18,6 +18,14 @@ Built for people who want to actually understand the RF engineering — not just
 - Related exam questions shown after each explanation with correct answers marked
 - Follow-up questions supported — it's a conversation, not a page
 
+**Frequency Band Reference**
+
+![bands command demo](assets/demo-bands.gif)
+
+- `bands` — log-scale spectrum chart (100 kHz–1 GHz) showing all 15 Canadian amateur allocations
+- Green = primary (protected), yellow = secondary (must not interfere)
+- Exam key facts and question-bank cross-references for every band
+
 **Quiz & Exam Mode**
 
 ![quiz mode demo](assets/demo.gif)
@@ -64,6 +72,7 @@ The question bank (984 questions from the ISED public-domain database) is compil
 
 ```bash
 hamrs concept          # Learn any section with AI explanations — start here
+hamrs bands            # Frequency band reference — log-scale spectrum chart with exam key facts
 hamrs quiz             # Weighted practice quiz, with interactive section picker
 hamrs quiz -s 5        # Practice section 5 only (Electrical Principles)
 hamrs quiz -s 5,6      # Practice sections 5 and 6

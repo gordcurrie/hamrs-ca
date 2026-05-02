@@ -42,6 +42,8 @@ enum Command {
     Concept,
     /// Show recent session history
     Stats,
+    /// Frequency band reference — log-scale spectrum chart with exam key facts
+    Bands,
 }
 
 #[tokio::main]
@@ -74,6 +76,9 @@ async fn main() -> Result<()> {
         }
         Command::Stats => {
             print_stats(&db)?;
+        }
+        Command::Bands => {
+            modes::bands::run(&bank);
         }
     }
 

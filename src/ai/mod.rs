@@ -20,7 +20,8 @@ For each concept:
 Be dense and precise. Aim for the depth of a good RF engineering textbook. No padding.
 
 Use markdown formatting. For bullet points always use `- ` (dash space), never `*   ` with indentation. \
-Keep bullet content on a single line without indentation.";
+Keep bullet content on a single line without indentation. \
+Do not use LaTeX math notation ($...$, $$...$$). Write formulas as plain text, using blockquotes for emphasis — e.g., > λ (m) = 300 / f (MHz).";
 
 #[derive(Deserialize, Default)]
 struct HamrsConfig {

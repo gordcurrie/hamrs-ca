@@ -74,9 +74,6 @@ pub fn setup(
         Some(m) => m,
         None => prompt_mode()?,
     };
-    if mode == MorseMode::Receive && false {
-        // placeholder branch kept for future audio gate
-    }
 
     let wpm = match wpm_flag {
         Some(w) => w,

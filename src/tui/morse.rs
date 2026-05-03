@@ -106,13 +106,12 @@ impl<'a> App<'a> {
         let item = self.current_item();
 
         let correct = match self.item_mode {
-            ItemMode::Receive => {
-                raw.to_uppercase()
-                    .chars()
-                    .next()
-                    .map(|c| c == item.character)
-                    .unwrap_or(false)
-            }
+            ItemMode::Receive => raw
+                .to_uppercase()
+                .chars()
+                .next()
+                .map(|c| c == item.character)
+                .unwrap_or(false),
             ItemMode::Transmit => {
                 // Decode what the user typed and compare to the expected character
                 morse::decode(&raw) == Some(item.character)
@@ -164,7 +163,10 @@ impl<'a> App<'a> {
     fn handle_key(&mut self, code: KeyCode) {
         match self.screen {
             Screen::Score => {
-                if matches!(code, KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Enter | KeyCode::Esc) {
+                if matches!(
+                    code,
+                    KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Enter | KeyCode::Esc
+                ) {
                     self.should_quit = true;
                 }
             }
@@ -235,7 +237,8 @@ impl<'a> App<'a> {
         if self.response_times_ms.is_empty() {
             return None;
         }
-        let avg_ms = self.response_times_ms.iter().sum::<u64>() / self.response_times_ms.len() as u64;
+        let avg_ms =
+            self.response_times_ms.iter().sum::<u64>() / self.response_times_ms.len() as u64;
         // avg_ms per character; 1 word = 5 chars; WPM = 60000 / (avg_ms * 5)
         let wpm = 60_000u64 / (avg_ms.max(1) * 5);
         Some(wpm.min(999) as u32)
@@ -385,16 +388,12 @@ fn render_receive_prompt(frame: &mut ratatui::Frame, area: ratatui::layout::Rect
         })
         .collect();
 
-    let label = Span::styled(
-        "  Decode: ",
-        Style::default().add_modifier(Modifier::DIM),
-    );
+    let label = Span::styled("  Decode: ", Style::default().add_modifier(Modifier::DIM));
     let mut line_spans = vec![label];
     line_spans.extend(spans);
 
     frame.render_widget(
-        Paragraph::new(Line::from(line_spans))
-            .style(Style::default()),
+        Paragraph::new(Line::from(line_spans)).style(Style::default()),
         area,
     );
 }
@@ -500,17 +499,17 @@ fn render_score(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &A
         .split(area);
 
     frame.render_widget(
-        Paragraph::new(format!(
-            "  Score: {}/{} ({}%)",
-            app.score, total, pct
-        ))
-        .style(Style::default().add_modifier(Modifier::BOLD)),
+        Paragraph::new(format!("  Score: {}/{} ({}%)", app.score, total, pct))
+            .style(Style::default().add_modifier(Modifier::BOLD)),
         chunks[1],
     );
 
     // WPM line — show actual transmit WPM if available
     let wpm_line = if let Some(actual_wpm) = app.effective_transmit_wpm() {
-        format!("  Transmit speed: {} WPM  (target: {} WPM)", actual_wpm, app.wpm)
+        format!(
+            "  Transmit speed: {} WPM  (target: {} WPM)",
+            actual_wpm, app.wpm
+        )
     } else {
         format!("  Target WPM: {}", app.wpm)
     };

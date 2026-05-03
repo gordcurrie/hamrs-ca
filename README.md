@@ -28,6 +28,8 @@ Built for people who want to actually understand the RF engineering — not just
 
 **Morse Code Practice**
 
+![morse mode demo](assets/demo-morse.gif)
+
 - `morse` — interactive trainer for both decoding and encoding
 - **Receive mode**: Morse elements animate one at a time at your target WPM — watch the pattern, type the character
 - **Transmit mode**: A character is shown; type the Morse (`.` and `-`) and hit Enter — your actual WPM is calculated from response times

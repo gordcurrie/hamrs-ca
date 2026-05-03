@@ -77,7 +77,10 @@ mod tests {
 
     #[test]
     fn normalise_strips_typographic() {
-        assert_eq!(normalise("–..–"), "-..−".replace('−', "-").replace('–', "-"));
+        assert_eq!(
+            normalise("–..–"),
+            "-..−".replace('−', "-").replace('–', "-")
+        );
         assert_eq!(normalise(" .- "), ".-");
     }
 

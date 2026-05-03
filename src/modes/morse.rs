@@ -1,5 +1,5 @@
 use crate::morse;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use rand::seq::SliceRandom;
 use std::io::{self, BufRead, Write};
 
@@ -72,19 +72,41 @@ pub fn setup(
 
     let mode = match mode_flag {
         Some(m) => m,
-        None => prompt_mode()?,
+        None => match prompt_mode()? {
+            Some(m) => m,
+            None => return Ok(None),
+        },
     };
 
     let wpm = match wpm_flag {
-        Some(w) => w,
-        None => prompt_wpm()?,
+        Some(w) => {
+            if !(1..=99).contains(&w) {
+                bail!("--wpm must be between 1 and 99");
+            }
+            w
+        }
+        None => match prompt_wpm()? {
+            Some(w) => w,
+            None => return Ok(None),
+        },
     };
 
-    let charset = prompt_charset()?;
+    let charset = match prompt_charset()? {
+        Some(c) => c,
+        None => return Ok(None),
+    };
 
     let count = match count_flag {
-        Some(c) => c,
-        None => prompt_count()?,
+        Some(c) => {
+            if c == 0 {
+                bail!("--count must be at least 1");
+            }
+            c
+        }
+        None => match prompt_count()? {
+            Some(c) => c,
+            None => return Ok(None),
+        },
     };
 
     println!();
@@ -97,7 +119,7 @@ pub fn setup(
     })))
 }
 
-fn prompt_mode() -> Result<MorseMode> {
+fn prompt_mode() -> Result<Option<MorseMode>> {
     loop {
         println!("  Mode:");
         println!("    1.  Receive  — Morse shown, you type the character");
@@ -109,16 +131,16 @@ fn prompt_mode() -> Result<MorseMode> {
 
         let line = read_line()?;
         match line.trim() {
-            "q" | "Q" => std::process::exit(0),
-            "1" => return Ok(MorseMode::Receive),
-            "2" => return Ok(MorseMode::Transmit),
-            "3" => return Ok(MorseMode::Both),
+            "q" | "Q" => return Ok(None),
+            "1" => return Ok(Some(MorseMode::Receive)),
+            "2" => return Ok(Some(MorseMode::Transmit)),
+            "3" => return Ok(Some(MorseMode::Both)),
             _ => println!("  Invalid choice.\n"),
         }
     }
 }
 
-fn prompt_wpm() -> Result<u32> {
+fn prompt_wpm() -> Result<Option<u32>> {
     const PRESETS: &[u32] = &[5, 10, 13, 15, 20];
     loop {
         println!();
@@ -133,25 +155,25 @@ fn prompt_wpm() -> Result<u32> {
 
         let line = read_line()?;
         match line.trim() {
-            "q" | "Q" => std::process::exit(0),
+            "q" | "Q" => return Ok(None),
             "c" | "C" => {
                 print!("  WPM (1–99): ");
                 io::stdout().flush()?;
                 let raw = read_line()?;
                 match raw.trim().parse::<u32>() {
-                    Ok(w) if (1..=99).contains(&w) => return Ok(w),
+                    Ok(w) if (1..=99).contains(&w) => return Ok(Some(w)),
                     _ => println!("  Enter a number between 1 and 99.\n"),
                 }
             }
             s => match s.parse::<usize>() {
-                Ok(n) if n >= 1 && n <= PRESETS.len() => return Ok(PRESETS[n - 1]),
+                Ok(n) if n >= 1 && n <= PRESETS.len() => return Ok(Some(PRESETS[n - 1])),
                 _ => println!("  Invalid choice.\n"),
             },
         }
     }
 }
 
-fn prompt_charset() -> Result<Charset> {
+fn prompt_charset() -> Result<Option<Charset>> {
     loop {
         println!();
         println!("  Characters:");
@@ -164,16 +186,16 @@ fn prompt_charset() -> Result<Charset> {
 
         let line = read_line()?;
         match line.trim() {
-            "q" | "Q" => std::process::exit(0),
-            "1" => return Ok(Charset::Letters),
-            "2" => return Ok(Charset::Numbers),
-            "3" => return Ok(Charset::Both),
+            "q" | "Q" => return Ok(None),
+            "1" => return Ok(Some(Charset::Letters)),
+            "2" => return Ok(Some(Charset::Numbers)),
+            "3" => return Ok(Some(Charset::Both)),
             _ => println!("  Invalid choice.\n"),
         }
     }
 }
 
-fn prompt_count() -> Result<usize> {
+fn prompt_count() -> Result<Option<usize>> {
     loop {
         println!();
         print!("  Items per session [20]: ");
@@ -181,15 +203,13 @@ fn prompt_count() -> Result<usize> {
 
         let line = read_line()?;
         let s = line.trim();
-        if s.is_empty() || s == "q" || s == "Q" {
-            if s == "q" || s == "Q" {
-                std::process::exit(0);
-            }
-            return Ok(20);
-        }
-        match s.parse::<usize>() {
-            Ok(n) if n >= 1 => return Ok(n),
-            _ => println!("  Enter a positive number.\n"),
+        match s {
+            "" => return Ok(Some(20)),
+            "q" | "Q" => return Ok(None),
+            _ => match s.parse::<usize>() {
+                Ok(n) if n >= 1 => return Ok(Some(n)),
+                _ => println!("  Enter a positive number.\n"),
+            },
         }
     }
 }

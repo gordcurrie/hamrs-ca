@@ -185,7 +185,7 @@ impl<'a> App<'a> {
             return;
         }
 
-        // Receive: wait until playback is done before accepting input
+        // Receive: block input and handle replay/quit while animation plays
         if self.item_mode == ItemMode::Receive
             && matches!(self.playback, PlaybackState::Playing { .. })
         {
@@ -202,6 +202,17 @@ impl<'a> App<'a> {
             return;
         }
 
+        // Receive: allow replay even after animation finishes (Waiting state)
+        if self.item_mode == ItemMode::Receive {
+            if let KeyCode::Char('r') | KeyCode::Char('R') = code {
+                self.playback = PlaybackState::Playing {
+                    element_idx: 0,
+                    since: Instant::now(),
+                };
+                return;
+            }
+        }
+
         match code {
             KeyCode::Enter if !self.input.is_empty() => {
                 self.submit();
@@ -209,7 +220,7 @@ impl<'a> App<'a> {
             KeyCode::Backspace => {
                 self.input.pop();
             }
-            KeyCode::Char('q') if self.input.is_empty() => {
+            KeyCode::Char('q') | KeyCode::Char('Q') if self.input.is_empty() => {
                 self.should_quit = true;
             }
             KeyCode::Char(c) => {

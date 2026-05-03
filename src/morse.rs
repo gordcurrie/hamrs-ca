@@ -58,9 +58,9 @@ pub fn normalise(s: &str) -> String {
         .join("")
 }
 
-/// Duration of one dit in milliseconds at the given WPM.
+/// Duration of one dit in milliseconds at the given WPM (minimum 1 WPM to avoid divide-by-zero).
 pub fn dit_ms(wpm: u32) -> u64 {
-    1200 / wpm as u64
+    1200 / wpm.max(1) as u64
 }
 
 #[cfg(test)]

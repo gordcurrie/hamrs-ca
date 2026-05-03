@@ -11,7 +11,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Margin},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Gauge, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
@@ -267,7 +267,9 @@ fn render_quiz(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &Ap
     let sep = Paragraph::new("─".repeat(area.width as usize));
     frame.render_widget(sep, chunks[2]);
 
-    // Answers
+    // Answers — word-wrap each answer to avoid truncation
+    let prefix_width = 6usize; // "  A.  "
+    let answer_width = (chunks[3].width as usize).saturating_sub(prefix_width);
     let items: Vec<ListItem> = q
         .answers
         .iter()
@@ -275,10 +277,22 @@ fn render_quiz(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &Ap
         .map(|(i, ans)| {
             let label = ['A', 'B', 'C', 'D'][i];
             let style = answer_style(app, i);
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("  {label}.  "), style),
-                Span::styled(ans.clone(), style),
-            ]))
+            let wrapped = word_wrap(ans, answer_width);
+            let mut lines: Vec<Line> = Vec::new();
+            for (j, line) in wrapped.iter().enumerate() {
+                if j == 0 {
+                    lines.push(Line::from(vec![
+                        Span::styled(format!("  {label}.  "), style),
+                        Span::styled(line.clone(), style),
+                    ]));
+                } else {
+                    lines.push(Line::from(vec![
+                        Span::raw(" ".repeat(prefix_width)),
+                        Span::styled(line.clone(), style),
+                    ]));
+                }
+            }
+            ListItem::new(Text::from(lines))
         })
         .collect();
 
@@ -345,6 +359,29 @@ fn answer_style(app: &App, index: usize) -> Style {
     }
 }
 
+fn word_wrap(text: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![text.to_string()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.len() + 1 + word.len() <= width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(std::mem::take(&mut current));
+            current.push_str(word);
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
 fn render_score(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App) {
     let total = app.total() as u32;
     let pct = (app.score * 100) / total.max(1);
@@ -399,4 +436,34 @@ fn render_score(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &A
     let footer =
         Paragraph::new("  q / Enter  Quit").style(Style::default().add_modifier(Modifier::DIM));
     frame.render_widget(footer, chunks[4]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn word_wrap_fits_on_one_line() {
+        assert_eq!(word_wrap("hello world", 20), vec!["hello world"]);
+    }
+
+    #[test]
+    fn word_wrap_breaks_at_boundary() {
+        let result = word_wrap("The field strength of your emissions", 20);
+        assert!(result.iter().all(|l| l.len() <= 20));
+        assert!(result.len() > 1);
+    }
+
+    #[test]
+    fn word_wrap_zero_width_returns_original() {
+        assert_eq!(word_wrap("hello", 0), vec!["hello"]);
+    }
+
+    #[test]
+    fn word_wrap_long_ised_answer() {
+        let text = "The field strength of your emissions, on your neighbour's premises, is below Innovation, Science and Economic Development Canada's specified immunity criteria";
+        let result = word_wrap(text, 74);
+        assert!(result.iter().all(|l| l.len() <= 74));
+        assert_eq!(result.join(" "), text);
+    }
 }

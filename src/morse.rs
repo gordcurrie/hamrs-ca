@@ -43,6 +43,7 @@ pub fn encode(c: char) -> Option<&'static str> {
     TABLE.iter().find(|(ch, _)| *ch == c).map(|(_, m)| *m)
 }
 
+#[allow(dead_code)]
 pub fn decode(s: &str) -> Option<char> {
     let s = normalise(s);
     TABLE.iter().find(|(_, m)| *m == s).map(|(ch, _)| *ch)
@@ -51,8 +52,8 @@ pub fn decode(s: &str) -> Option<char> {
 /// Normalise user input: trim, strip all whitespace, replace typographic dashes/dots.
 pub fn normalise(s: &str) -> String {
     s.trim()
-        .replace(['–', '—', '−'], "-")
-        .replace(['·', '•'], ".")
+        .replace(&['–', '—', '−'][..], "-")
+        .replace(&['·', '•'][..], ".")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join("")

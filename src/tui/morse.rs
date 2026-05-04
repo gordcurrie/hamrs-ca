@@ -39,8 +39,8 @@ enum PlaybackState {
     Waiting,
 }
 
-struct App<'a> {
-    items: &'a [MorseItem],
+struct App {
+    items: Vec<MorseItem>,
     current: usize,
     score: u32,
     /// Current text typed by the user (held in a buffer).
@@ -59,12 +59,12 @@ struct App<'a> {
     should_quit: bool,
 }
 
-impl<'a> App<'a> {
-    fn new(session: &'a MorseSession) -> Self {
+impl App {
+    fn new(session: MorseSession) -> Self {
         let item_mode = effective_mode(session.config.mode, 0);
         let playback = initial_playback(item_mode);
         Self {
-            items: &session.items,
+            items: session.items,
             current: 0,
             score: 0,
             input: String::new(),
@@ -112,10 +112,8 @@ impl<'a> App<'a> {
                 .next()
                 .map(|c| c == item.character)
                 .unwrap_or(false),
-            ItemMode::Transmit => {
-                // Decode what the user typed and compare to the expected character
-                morse::decode(&raw) == Some(item.character)
-            }
+            // raw is already normalised; item.code is the canonical table string
+            ItemMode::Transmit => raw == item.code,
         };
 
         if correct {
@@ -138,7 +136,8 @@ impl<'a> App<'a> {
         let code = self.current_item().code;
         let bytes = code.as_bytes();
 
-        if let PlaybackState::Playing { element_idx, since } = self.playback {
+        // Loop so multiple elements can advance in one tick at high WPM
+        while let PlaybackState::Playing { element_idx, since } = self.playback {
             let element_ms = if bytes[element_idx] == b'-' {
                 dit_ms(self.wpm) * 3
             } else {
@@ -156,12 +155,15 @@ impl<'a> App<'a> {
                 if next >= bytes.len() {
                     self.playback = PlaybackState::Waiting;
                     self.item_started = Instant::now();
+                    break;
                 } else {
                     self.playback = PlaybackState::Playing {
                         element_idx: next,
                         since: Instant::now(),
                     };
                 }
+            } else {
+                break;
             }
         }
     }
@@ -287,7 +289,7 @@ fn initial_playback(mode: ItemMode) -> PlaybackState {
 }
 
 pub fn run(session: MorseSession) -> Result<()> {
-    let mut app = App::new(&session);
+    let mut app = App::new(session);
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -308,8 +310,16 @@ pub fn run(session: MorseSession) -> Result<()> {
             break;
         }
 
-        // Poll short so the animation ticks frequently enough
-        if event::poll(Duration::from_millis(30))? {
+        // Use a tight poll only while the receive animation is active
+        let poll_ms = if app.screen == Screen::Practice
+            && app.item_mode == ItemMode::Receive
+            && matches!(app.playback, PlaybackState::Playing { .. })
+        {
+            15
+        } else {
+            100
+        };
+        if event::poll(Duration::from_millis(poll_ms))? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
                     app.handle_key(key.code);
@@ -563,14 +573,13 @@ mod tests {
     use super::*;
     use crate::modes::morse::{Charset, MorseConfig, MorseMode, MorseSession};
 
-    fn app_with_times(times: Vec<u64>) -> App<'static> {
-        // Build a minimal session so App has something to borrow
-        let session = Box::leak(Box::new(MorseSession::build(MorseConfig {
+    fn app_with_times(times: Vec<u64>) -> App {
+        let session = MorseSession::build(MorseConfig {
             mode: MorseMode::Transmit,
             wpm: 13,
             charset: Charset::Letters,
             count: 1,
-        })));
+        });
         let mut app = App::new(session);
         app.response_times_ms = times;
         app

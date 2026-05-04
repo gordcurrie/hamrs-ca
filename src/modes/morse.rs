@@ -24,6 +24,7 @@ pub struct MorseConfig {
     pub count: usize,
 }
 
+#[derive(Clone)]
 pub struct MorseItem {
     pub character: char,
     pub code: &'static str,

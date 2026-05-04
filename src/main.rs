@@ -47,9 +47,9 @@ enum Command {
     Bands,
     /// Morse code practice — receive (decode) and transmit (encode)
     Morse {
-        /// Practice mode: receive, transmit, or both
-        #[arg(short, long, value_name = "MODE")]
-        mode: Option<String>,
+        /// Practice mode
+        #[arg(short, long)]
+        mode: Option<modes::morse::MorseMode>,
         /// Target words per minute
         #[arg(short, long, value_name = "N")]
         wpm: Option<u32>,
@@ -94,14 +94,7 @@ async fn main() -> Result<()> {
             modes::bands::run(&bank);
         }
         Command::Morse { mode, wpm, count } => {
-            use modes::morse::MorseMode;
-            let mode_flag = mode.as_deref().and_then(|s| match s {
-                "receive" | "r" => Some(MorseMode::Receive),
-                "transmit" | "t" => Some(MorseMode::Transmit),
-                "both" | "b" => Some(MorseMode::Both),
-                _ => None,
-            });
-            if let Some(session) = modes::morse::setup(mode_flag, wpm, count)? {
+            if let Some(session) = modes::morse::setup(mode, wpm, count)? {
                 tui::morse::run(session)?;
             }
         }

@@ -3,7 +3,7 @@ use anyhow::{bail, Result};
 use rand::seq::SliceRandom;
 use std::io::{self, BufRead, Write};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
 pub enum MorseMode {
     Receive,
     Transmit,
@@ -35,7 +35,7 @@ pub struct MorseSession {
 }
 
 impl MorseSession {
-    pub fn build(config: MorseConfig) -> Self {
+    pub fn build(mut config: MorseConfig) -> Self {
         let pool: Vec<(char, &'static str)> = morse::TABLE
             .iter()
             .filter(|(ch, _)| match config.charset {
@@ -47,10 +47,11 @@ impl MorseSession {
             .collect();
 
         let mut rng = rand::thread_rng();
-        let count = config.count.min(pool.len());
+        // Clamp and keep config in sync so session.config.count == session.items.len()
+        config.count = config.count.min(pool.len());
 
         let items: Vec<MorseItem> = pool
-            .choose_multiple(&mut rng, count)
+            .choose_multiple(&mut rng, config.count)
             .map(|(ch, code)| MorseItem {
                 character: *ch,
                 code,

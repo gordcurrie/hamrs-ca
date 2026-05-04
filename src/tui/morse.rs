@@ -136,20 +136,26 @@ impl<'a> App<'a> {
             return;
         }
         let code = self.current_item().code;
-        let elements: Vec<char> = code.chars().collect();
+        let bytes = code.as_bytes();
 
         if let PlaybackState::Playing { element_idx, since } = self.playback {
-            let elem = elements[element_idx];
-            let duration_ms = if elem == '-' {
+            let element_ms = if bytes[element_idx] == b'-' {
                 dit_ms(self.wpm) * 3
             } else {
                 dit_ms(self.wpm)
             };
-            if since.elapsed().as_millis() as u64 >= duration_ms {
-                let next = element_idx + 1;
-                if next >= elements.len() {
+            let next = element_idx + 1;
+            // Include a 1-dit inter-element gap so timing matches stated WPM
+            let total_ms = element_ms
+                + if next < bytes.len() {
+                    dit_ms(self.wpm)
+                } else {
+                    0
+                };
+            if since.elapsed().as_millis() as u64 >= total_ms {
+                if next >= bytes.len() {
                     self.playback = PlaybackState::Waiting;
-                    self.item_started = Instant::now(); // reset so WPM doesn't measure animation time
+                    self.item_started = Instant::now();
                 } else {
                     self.playback = PlaybackState::Playing {
                         element_idx: next,
@@ -175,7 +181,7 @@ impl<'a> App<'a> {
     }
 
     fn handle_practice_key(&mut self, code: KeyCode) {
-        // After submitting — any key advances
+        // After submitting — Enter/Space advances, q quits
         if self.result.is_some() {
             match code {
                 KeyCode::Enter | KeyCode::Char(' ') => self.advance(),
@@ -375,17 +381,16 @@ fn render_practice(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app:
 
 fn render_receive_prompt(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App) {
     let code = app.current_item().code;
-    let elements: Vec<char> = code.chars().collect();
 
     let current_element_idx = match &app.playback {
         PlaybackState::Playing { element_idx, .. } => Some(*element_idx),
         PlaybackState::Waiting => None,
     };
 
-    let spans: Vec<Span> = elements
-        .iter()
+    let spans: Vec<Span> = code
+        .chars()
         .enumerate()
-        .map(|(i, &ch)| {
+        .map(|(i, ch)| {
             let symbol = if ch == '.' { "·" } else { "—" };
             let style = match current_element_idx {
                 Some(idx) if i == idx => Style::default()

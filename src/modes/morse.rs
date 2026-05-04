@@ -110,11 +110,14 @@ pub fn setup(
         },
     };
 
-    let max_for_charset = match charset {
-        Charset::Letters => 26,
-        Charset::Numbers => 10,
-        Charset::Both => 36,
-    };
+    let max_for_charset = morse::TABLE
+        .iter()
+        .filter(|(ch, _)| match charset {
+            Charset::Letters => ch.is_ascii_alphabetic(),
+            Charset::Numbers => ch.is_ascii_digit(),
+            Charset::Both => true,
+        })
+        .count();
     if count > max_for_charset {
         println!(
             "  (only {} characters in selected charset — session will have {} items)",

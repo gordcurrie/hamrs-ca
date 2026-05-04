@@ -120,7 +120,7 @@ hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 | `Enter` | Submit answer |
 | `r` | Replay current Morse animation (receive mode) |
 | `Enter` / `Space` | Advance after feedback |
-| `q` | Quit (when input is empty) |
+| `q` | Quit (when input buffer is empty, or after answering) |
 
 ---
 

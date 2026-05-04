@@ -474,14 +474,14 @@ fn render_input(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &A
 
 fn render_footer(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App) {
     let text = if app.result.is_some() {
-        "  Enter  Next   q  Quit"
+        "  Enter / Space  Next   q  Quit"
     } else {
         match app.item_mode {
             ItemMode::Receive => match &app.playback {
                 PlaybackState::Playing { .. } => "  r  Replay   q  Quit",
                 PlaybackState::Waiting => "  Type character + Enter   r  Replay   q  Quit",
             },
-            ItemMode::Transmit => "  Type Morse (. -) + Enter   q  Quit",
+            ItemMode::Transmit => "  Type Morse (. - Space) + Enter   q  Quit",
         }
     };
     frame.render_widget(
@@ -556,4 +556,64 @@ fn render_score(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &A
         Paragraph::new("  q / Enter  Quit").style(Style::default().add_modifier(Modifier::DIM)),
         chunks[5],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::modes::morse::{Charset, MorseConfig, MorseMode, MorseSession};
+
+    fn app_with_times(times: Vec<u64>) -> App<'static> {
+        // Build a minimal session so App has something to borrow
+        let session = Box::leak(Box::new(MorseSession::build(MorseConfig {
+            mode: MorseMode::Transmit,
+            wpm: 13,
+            charset: Charset::Letters,
+            count: 1,
+        })));
+        let mut app = App::new(session);
+        app.response_times_ms = times;
+        app
+    }
+
+    #[test]
+    fn wpm_empty_returns_none() {
+        let app = app_with_times(vec![]);
+        assert_eq!(app.effective_transmit_wpm(), None);
+    }
+
+    #[test]
+    fn wpm_typical_speed() {
+        // 1000ms per char → 60000 / (1000 * 5) = 12 WPM
+        let app = app_with_times(vec![1000]);
+        assert_eq!(app.effective_transmit_wpm(), Some(12));
+    }
+
+    #[test]
+    fn wpm_slow_speed() {
+        // 6000ms per char → 60000 / (6000 * 5) = 2 WPM
+        let app = app_with_times(vec![6000]);
+        assert_eq!(app.effective_transmit_wpm(), Some(2));
+    }
+
+    #[test]
+    fn wpm_fast_speed() {
+        // 200ms per char → 60000 / (200 * 5) = 60 WPM
+        let app = app_with_times(vec![200]);
+        assert_eq!(app.effective_transmit_wpm(), Some(60));
+    }
+
+    #[test]
+    fn wpm_caps_at_999() {
+        // 1ms per char → would be 12000 WPM, capped to 999
+        let app = app_with_times(vec![1]);
+        assert_eq!(app.effective_transmit_wpm(), Some(999));
+    }
+
+    #[test]
+    fn wpm_averages_multiple_times() {
+        // avg of 1000 and 3000 = 2000ms → 60000 / (2000 * 5) = 6 WPM
+        let app = app_with_times(vec![1000, 3000]);
+        assert_eq!(app.effective_transmit_wpm(), Some(6));
+    }
 }

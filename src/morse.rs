@@ -48,7 +48,7 @@ pub fn decode(s: &str) -> Option<char> {
     TABLE.iter().find(|(_, m)| *m == s).map(|(ch, _)| *ch)
 }
 
-/// Normalise user input: trim, collapse spaces, replace typographic dashes.
+/// Normalise user input: trim, strip all whitespace, replace typographic dashes/dots.
 pub fn normalise(s: &str) -> String {
     s.trim()
         .replace(['–', '—', '−'], "-")

@@ -110,6 +110,18 @@ pub fn setup(
         },
     };
 
+    let max_for_charset = match charset {
+        Charset::Letters => 26,
+        Charset::Numbers => 10,
+        Charset::Both => 36,
+    };
+    if count > max_for_charset {
+        println!(
+            "  (only {} characters in selected charset — session will have {} items)",
+            max_for_charset, max_for_charset
+        );
+    }
+
     println!();
 
     Ok(Some(MorseSession::build(MorseConfig {
@@ -219,4 +231,62 @@ fn read_line() -> Result<String> {
     let mut line = String::new();
     io::stdin().lock().read_line(&mut line)?;
     Ok(line)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config(charset: Charset, count: usize) -> MorseConfig {
+        MorseConfig {
+            mode: MorseMode::Receive,
+            wpm: 13,
+            charset,
+            count,
+        }
+    }
+
+    #[test]
+    fn build_letters_only_yields_letter_items() {
+        let session = MorseSession::build(config(Charset::Letters, 26));
+        assert!(!session.items.is_empty());
+        assert!(session
+            .items
+            .iter()
+            .all(|item| item.character.is_ascii_alphabetic()));
+    }
+
+    #[test]
+    fn build_numbers_only_yields_digit_items() {
+        let session = MorseSession::build(config(Charset::Numbers, 10));
+        assert!(!session.items.is_empty());
+        assert!(session
+            .items
+            .iter()
+            .all(|item| item.character.is_ascii_digit()));
+    }
+
+    #[test]
+    fn build_clamps_count_to_pool_and_keeps_config_consistent() {
+        let session = MorseSession::build(config(Charset::Numbers, 99));
+        assert_eq!(session.items.len(), 10);
+        assert_eq!(session.config.count, 10);
+    }
+
+    #[test]
+    fn build_no_duplicate_characters() {
+        let session = MorseSession::build(config(Charset::Both, 36));
+        let mut chars: Vec<char> = session.items.iter().map(|i| i.character).collect();
+        chars.sort();
+        chars.dedup();
+        assert_eq!(chars.len(), session.items.len());
+    }
+
+    #[test]
+    fn build_items_have_correct_morse_codes() {
+        let session = MorseSession::build(config(Charset::Both, 36));
+        for item in &session.items {
+            assert_eq!(crate::morse::encode(item.character), Some(item.code));
+        }
+    }
 }

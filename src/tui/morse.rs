@@ -31,7 +31,7 @@ enum ItemMode {
 }
 
 /// State of the animated receive playback.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 enum PlaybackState {
     /// Showing element `idx` of the code string; started at `since`.
     Playing { element_idx: usize, since: Instant },

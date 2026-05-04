@@ -66,6 +66,12 @@ cargo install --git https://github.com/gordcurrie/hamrs-ca
 
 Requires the [Rust toolchain](https://rustup.rs). The binary installs to `~/.cargo/bin/hamrs`.
 
+**Linux note:** Morse audio requires ALSA. Install the dev package before building:
+```bash
+sudo apt-get install -y libasound2-dev   # Debian/Ubuntu
+sudo dnf install -y alsa-lib-devel       # Fedora/RHEL
+```
+
 ### Build from source
 
 ```bash
@@ -74,13 +80,7 @@ cd hamrs-ca
 cargo build --release
 ```
 
-The binary is at `target/release/hamrs`.
-
-**Linux note:** Morse audio requires ALSA. Install the dev package before building:
-```bash
-sudo apt-get install -y libasound2-dev   # Debian/Ubuntu
-sudo dnf install -y alsa-lib-devel       # Fedora/RHEL
-```
+The binary is at `target/release/hamrs`. (Linux ALSA note above applies here too.)
 
 ---
 

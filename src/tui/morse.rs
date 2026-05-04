@@ -17,6 +17,8 @@ use ratatui::{
 };
 use rodio::source::SineWave;
 use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+
+const CW_HZ: f32 = 700.0;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -69,9 +71,14 @@ impl App {
     fn new(session: MorseSession) -> Self {
         let item_mode = effective_mode(session.config.mode, 0);
         let playback = initial_playback(item_mode);
-        let (_audio_stream, audio_handle) = match OutputStream::try_default() {
-            Ok((s, h)) => (Some(s), Some(h)),
-            Err(_) => (None, None),
+        // Only open the audio device when receive mode is actually possible.
+        let (_audio_stream, audio_handle) = if session.config.mode != MorseMode::Transmit {
+            match OutputStream::try_default() {
+                Ok((s, h)) => (Some(s), Some(h)),
+                Err(_) => (None, None),
+            }
+        } else {
+            (None, None)
         };
         let mut app = Self {
             items: session.items,
@@ -108,17 +115,16 @@ impl App {
         let code = self.current_item().code;
         let dit = dit_ms(self.wpm);
         let bytes = code.as_bytes();
-        for (i, &b) in bytes.iter().enumerate() {
-            let tone_ms = if b == b'-' { dit * 3 } else { dit };
-            let gap_ms = if i + 1 < bytes.len() { dit } else { 0 };
+        for i in 0..bytes.len() {
+            let (tone_ms, gap_ms) = element_timing(bytes, i, dit);
             sink.append(
-                SineWave::new(700.0)
+                SineWave::new(CW_HZ)
                     .take_duration(Duration::from_millis(tone_ms))
                     .amplify(0.20),
             );
             if gap_ms > 0 {
                 sink.append(
-                    SineWave::new(700.0)
+                    SineWave::new(CW_HZ)
                         .take_duration(Duration::from_millis(gap_ms))
                         .amplify(0.0),
                 );
@@ -190,19 +196,9 @@ impl App {
 
         // Loop so multiple elements can advance in one tick at high WPM
         while let PlaybackState::Playing { element_idx, since } = self.playback {
-            let element_ms = if bytes[element_idx] == b'-' {
-                dit_ms(self.wpm) * 3
-            } else {
-                dit_ms(self.wpm)
-            };
+            let (tone_ms, gap_ms) = element_timing(bytes, element_idx, dit_ms(self.wpm));
+            let total_ms = tone_ms + gap_ms;
             let next = element_idx + 1;
-            // Include a 1-dit inter-element gap so timing matches stated WPM
-            let total_ms = element_ms
-                + if next < bytes.len() {
-                    dit_ms(self.wpm)
-                } else {
-                    0
-                };
             if since.elapsed().as_millis() as u64 >= total_ms {
                 if next >= bytes.len() {
                     self.playback = PlaybackState::Waiting;
@@ -316,6 +312,13 @@ impl App {
         let wpm = 60_000u64 / (avg_ms.max(1) * 5);
         Some(wpm.min(999) as u32)
     }
+}
+
+/// Returns (tone_ms, gap_ms) for element `idx` in `bytes` at the given dit duration.
+fn element_timing(bytes: &[u8], idx: usize, dit: u64) -> (u64, u64) {
+    let tone_ms = if bytes[idx] == b'-' { dit * 3 } else { dit };
+    let gap_ms = if idx + 1 < bytes.len() { dit } else { 0 };
+    (tone_ms, gap_ms)
 }
 
 fn effective_mode(session_mode: MorseMode, index: usize) -> ItemMode {

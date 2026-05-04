@@ -146,6 +146,7 @@ impl App {
             self.item_mode = effective_mode(self.session_mode, self.current);
             self.playback = initial_playback(self.item_mode);
             self.item_started = Instant::now();
+            self.audio_sink = None;
             if self.item_mode == ItemMode::Receive {
                 self.play_audio();
             }

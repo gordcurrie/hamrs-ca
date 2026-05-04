@@ -76,6 +76,12 @@ cargo build --release
 
 The binary is at `target/release/hamrs`.
 
+**Linux note:** Morse audio requires ALSA. Install the dev package before building:
+```bash
+sudo apt-get install -y libasound2-dev   # Debian/Ubuntu
+sudo dnf install -y alsa-lib-devel       # Fedora/RHEL
+```
+
 ---
 
 The question bank (984 questions from the ISED public-domain database) is compiled into the binary — no data files to manage.

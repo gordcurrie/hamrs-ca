@@ -26,6 +26,17 @@ Built for people who want to actually understand the RF engineering — not just
 - Green = primary (protected), yellow = secondary (must not interfere)
 - Exam key facts and question-bank cross-references for every band
 
+**Morse Code Practice**
+
+![morse mode demo](assets/demo-morse.gif)
+
+- `morse` — interactive trainer for both decoding and encoding
+- **Receive mode**: Morse elements animate one at a time at your target WPM — watch the pattern, type the character
+- **Transmit mode**: A character is shown; type the Morse (`.` and `-`) and hit Enter — your actual WPM is calculated from response times
+- **Both**: alternates receive and transmit items in the same session
+- Prompts for mode, WPM (5 / 10 / 13 / 15 / 20 / custom), character set (letters, numbers, or both), and session length
+- Flags (`--mode`, `--wpm`, `--count`) skip individual prompts for scripted use
+
 **Quiz & Exam Mode**
 
 ![quiz mode demo](assets/demo.gif)
@@ -71,14 +82,16 @@ The question bank (984 questions from the ISED public-domain database) is compil
 ## Usage
 
 ```bash
-hamrs concept          # Learn any section with AI explanations — start here
-hamrs bands            # Frequency band reference — log-scale spectrum chart with exam key facts
-hamrs quiz             # Weighted practice quiz, with interactive section picker
-hamrs quiz -s 5        # Practice section 5 only (Electrical Principles)
-hamrs quiz -s 5,6      # Practice sections 5 and 6
-hamrs quiz -s 5 -c 10  # 10 questions from section 5
-hamrs exam             # Full 100-question timed exam (90 min)
-hamrs stats            # Recent session history
+hamrs concept              # Learn any section with AI explanations — start here
+hamrs bands                # Frequency band reference — log-scale spectrum chart with exam key facts
+hamrs quiz                 # Weighted practice quiz, with interactive section picker
+hamrs quiz -s 5            # Practice section 5 only (Electrical Principles)
+hamrs quiz -s 5,6          # Practice sections 5 and 6
+hamrs quiz -s 5 -c 10      # 10 questions from section 5
+hamrs exam                 # Full 100-question timed exam (90 min)
+hamrs stats                # Recent session history
+hamrs morse                # Morse code practice — prompts for all options
+hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 ```
 
 ### Recommended study flow
@@ -96,6 +109,18 @@ hamrs stats            # Recent session history
 | `1` – `4` | Jump directly to an answer |
 | `Enter` / `Space` | Confirm answer / advance |
 | `q` | Quit |
+
+### Morse controls
+
+| Key | Action |
+|-----|--------|
+| Letters / digits | Type decoded character (receive mode) |
+| `.` `-` `Space` | Type Morse pattern (transmit mode) |
+| `Backspace` | Delete last character |
+| `Enter` | Submit answer |
+| `r` | Replay current Morse animation (receive mode) |
+| `Enter` / `Space` | Advance after feedback |
+| `q` | Quit (when input buffer is empty, or after answering) |
 
 ---
 

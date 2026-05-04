@@ -2,6 +2,7 @@ mod ai;
 mod content;
 mod db;
 mod modes;
+mod morse;
 mod questions;
 mod tui;
 
@@ -44,6 +45,18 @@ enum Command {
     Stats,
     /// Frequency band reference — log-scale spectrum chart with exam key facts
     Bands,
+    /// Morse code practice — receive (decode) and transmit (encode)
+    Morse {
+        /// Practice mode
+        #[arg(short, long)]
+        mode: Option<modes::morse::MorseMode>,
+        /// Target words per minute
+        #[arg(short, long, value_name = "N")]
+        wpm: Option<u32>,
+        /// Number of items per session
+        #[arg(short, long, value_name = "N")]
+        count: Option<usize>,
+    },
 }
 
 #[tokio::main]
@@ -79,6 +92,11 @@ async fn main() -> Result<()> {
         }
         Command::Bands => {
             modes::bands::run(&bank);
+        }
+        Command::Morse { mode, wpm, count } => {
+            if let Some(session) = modes::morse::setup(mode, wpm, count)? {
+                tui::morse::run(session)?;
+            }
         }
     }
 

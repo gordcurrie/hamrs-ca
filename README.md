@@ -26,16 +26,19 @@ Built for people who want to actually understand the RF engineering — not just
 - Green = primary (protected), yellow = secondary (must not interfere)
 - Exam key facts and question-bank cross-references for every band
 
-**Morse Code Practice**
+**Morse Code Practice** *(experimental)*
+
+> **Note:** Morse mode is under active development — the interaction model may change significantly between releases.
 
 ![morse mode demo](assets/demo-morse.gif)
 
 - `morse` — interactive trainer for both decoding and encoding
-- **Receive mode**: Morse elements animate one at a time at your target WPM — watch the pattern, type the character
+- **Receive mode**: plays a 700 Hz CW tone at your target WPM while animating the pattern — hear and see the character, then type it
 - **Transmit mode**: A character is shown; type the Morse (`.` and `-`) and hit Enter — your actual WPM is calculated from response times
 - **Both**: alternates receive and transmit items in the same session
 - Prompts for mode, WPM (5 / 10 / 13 / 15 / 20 / custom), character set (letters, numbers, or both), and session length
 - Flags (`--mode`, `--wpm`, `--count`) skip individual prompts for scripted use
+- Falls back to visual-only animation if no audio device is available
 
 **Quiz & Exam Mode**
 
@@ -63,6 +66,12 @@ cargo install --git https://github.com/gordcurrie/hamrs-ca
 
 Requires the [Rust toolchain](https://rustup.rs). The binary installs to `~/.cargo/bin/hamrs`.
 
+**Linux note:** Morse audio requires ALSA. Install the dev package before building:
+```bash
+sudo apt-get install -y libasound2-dev   # Debian/Ubuntu
+sudo dnf install -y alsa-lib-devel       # Fedora/RHEL
+```
+
 ### Build from source
 
 ```bash
@@ -71,7 +80,7 @@ cd hamrs-ca
 cargo build --release
 ```
 
-The binary is at `target/release/hamrs`.
+The binary is at `target/release/hamrs`. (Linux ALSA note above applies here too.)
 
 ---
 
@@ -118,7 +127,7 @@ hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 | `.` `-` `Space` | Type Morse pattern (transmit mode) |
 | `Backspace` | Delete last character |
 | `Enter` | Submit answer |
-| `r` | Replay current Morse animation (receive mode) |
+| `r` | Replay current item — audio + visual (receive mode) |
 | `Enter` / `Space` | Advance after feedback |
 | `q` | Quit (when input buffer is empty, or after answering) |
 

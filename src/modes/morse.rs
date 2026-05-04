@@ -69,7 +69,7 @@ pub fn setup(
     count_flag: Option<usize>,
 ) -> Result<Option<MorseSession>> {
     println!();
-    println!("  \x1b[1mMorse Code Practice\x1b[0m");
+    println!("  \x1b[1mMorse Code Practice\x1b[0m  \x1b[2m[experimental]\x1b[0m");
     println!();
 
     let mode = match mode_flag {

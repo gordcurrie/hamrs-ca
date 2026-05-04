@@ -15,6 +15,10 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph},
     Terminal,
 };
+use rodio::source::SineWave;
+use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+
+const CW_HZ: f32 = 700.0;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -57,13 +61,26 @@ struct App {
     wpm: u32,
     screen: Screen,
     should_quit: bool,
+    // Audio — _audio_stream must stay alive for the duration of playback.
+    _audio_stream: Option<OutputStream>,
+    audio_handle: Option<OutputStreamHandle>,
+    audio_sink: Option<Sink>,
 }
 
 impl App {
     fn new(session: MorseSession) -> Self {
         let item_mode = effective_mode(session.config.mode, 0);
         let playback = initial_playback(item_mode);
-        Self {
+        // Only open the audio device when receive mode is actually possible.
+        let (_audio_stream, audio_handle) = if session.config.mode != MorseMode::Transmit {
+            match OutputStream::try_default() {
+                Ok((s, h)) => (Some(s), Some(h)),
+                Err(_) => (None, None),
+            }
+        } else {
+            (None, None)
+        };
+        let mut app = Self {
             items: session.items,
             current: 0,
             score: 0,
@@ -77,7 +94,43 @@ impl App {
             wpm: session.config.wpm,
             screen: Screen::Practice,
             should_quit: false,
+            _audio_stream,
+            audio_handle,
+            audio_sink: None,
+        };
+        if app.item_mode == ItemMode::Receive {
+            app.play_audio();
         }
+        app
+    }
+
+    fn play_audio(&mut self) {
+        self.audio_sink = None; // drop previous sink, stopping any active playback
+        let Some(handle) = &self.audio_handle else {
+            return;
+        };
+        let Ok(sink) = Sink::try_new(handle) else {
+            return;
+        };
+        let code = self.current_item().code;
+        let dit = dit_ms(self.wpm);
+        let bytes = code.as_bytes();
+        for i in 0..bytes.len() {
+            let (tone_ms, gap_ms) = element_timing(bytes, i, dit);
+            sink.append(
+                SineWave::new(CW_HZ)
+                    .take_duration(Duration::from_millis(tone_ms))
+                    .amplify(0.20),
+            );
+            if gap_ms > 0 {
+                sink.append(
+                    SineWave::new(CW_HZ)
+                        .take_duration(Duration::from_millis(gap_ms))
+                        .amplify(0.0),
+                );
+            }
+        }
+        self.audio_sink = Some(sink);
     }
 
     fn current_item(&self) -> &MorseItem {
@@ -90,6 +143,7 @@ impl App {
 
     fn advance(&mut self) {
         if self.current + 1 >= self.total() {
+            self.audio_sink = None;
             self.screen = Screen::Score;
         } else {
             self.current += 1;
@@ -98,6 +152,10 @@ impl App {
             self.item_mode = effective_mode(self.session_mode, self.current);
             self.playback = initial_playback(self.item_mode);
             self.item_started = Instant::now();
+            self.audio_sink = None;
+            if self.item_mode == ItemMode::Receive {
+                self.play_audio();
+            }
         }
     }
 
@@ -138,19 +196,9 @@ impl App {
 
         // Loop so multiple elements can advance in one tick at high WPM
         while let PlaybackState::Playing { element_idx, since } = self.playback {
-            let element_ms = if bytes[element_idx] == b'-' {
-                dit_ms(self.wpm) * 3
-            } else {
-                dit_ms(self.wpm)
-            };
+            let (tone_ms, gap_ms) = element_timing(bytes, element_idx, dit_ms(self.wpm));
+            let total_ms = tone_ms + gap_ms;
             let next = element_idx + 1;
-            // Include a 1-dit inter-element gap so timing matches stated WPM
-            let total_ms = element_ms
-                + if next < bytes.len() {
-                    dit_ms(self.wpm)
-                } else {
-                    0
-                };
             if since.elapsed().as_millis() as u64 >= total_ms {
                 if next >= bytes.len() {
                     self.playback = PlaybackState::Waiting;
@@ -203,6 +251,7 @@ impl App {
                         element_idx: 0,
                         since: Instant::now(),
                     };
+                    self.play_audio();
                 }
                 KeyCode::Char('q') | KeyCode::Char('Q') => self.should_quit = true,
                 _ => {}
@@ -217,6 +266,7 @@ impl App {
                     element_idx: 0,
                     since: Instant::now(),
                 };
+                self.play_audio();
                 return;
             }
         }
@@ -262,6 +312,13 @@ impl App {
         let wpm = 60_000u64 / (avg_ms.max(1) * 5);
         Some(wpm.min(999) as u32)
     }
+}
+
+/// Returns (tone_ms, gap_ms) for element `idx` in `bytes` at the given dit duration.
+fn element_timing(bytes: &[u8], idx: usize, dit: u64) -> (u64, u64) {
+    let tone_ms = if bytes[idx] == b'-' { dit * 3 } else { dit };
+    let gap_ms = if idx + 1 < bytes.len() { dit } else { 0 };
+    (tone_ms, gap_ms)
 }
 
 fn effective_mode(session_mode: MorseMode, index: usize) -> ItemMode {

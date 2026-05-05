@@ -14,6 +14,17 @@ cargo fmt --check                  # format check (CI enforces this)
 cargo fmt                          # auto-format
 ```
 
+## Git workflow
+
+All changes go through a feature branch and PR. Never commit directly to main.
+
+```bash
+git checkout -b feat/<name>   # always start from a branch
+# ... make changes ...
+git push -u origin feat/<name>
+gh pr create
+```
+
 ## After every code change
 
 Always run all three CI checks before declaring work done or opening a PR:

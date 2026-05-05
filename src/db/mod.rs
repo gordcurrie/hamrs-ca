@@ -176,6 +176,26 @@ impl Db {
         Ok(())
     }
 
+    pub fn all_question_stats(&self) -> Result<HashMap<String, QuestionStats>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT question_id, COUNT(*) as attempts, SUM(correct) as correct
+             FROM attempts GROUP BY question_id",
+        )?;
+        let stats = stmt
+            .query_map([], |row| {
+                Ok(QuestionStats {
+                    question_id: row.get(0)?,
+                    attempts: row.get::<_, u32>(1)?,
+                    correct: row.get::<_, u32>(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .map(|s| (s.question_id.clone(), s))
+            .collect();
+        Ok(stats)
+    }
+
     pub fn recent_sessions(&self, limit: u32) -> Result<Vec<(String, u32, u32)>> {
         let mut stmt = self.conn.prepare(
             "SELECT mode, score, total
@@ -342,6 +362,47 @@ mod tests {
     #[test]
     fn weight_zero_correct() {
         assert_eq!(stats(5, 0).weight(), 4);
+    }
+
+    #[test]
+    fn all_question_stats_empty() {
+        let db = Db::open_in_memory().unwrap();
+        let stats = db.all_question_stats().unwrap();
+        assert!(stats.is_empty());
+    }
+
+    #[test]
+    fn all_question_stats_aggregates_by_question() {
+        let db = Db::open_in_memory().unwrap();
+        let sid = db.start_session("test").unwrap();
+        db.record_attempt(sid, "B-001-001-001", true).unwrap();
+        db.record_attempt(sid, "B-001-001-001", false).unwrap();
+        db.record_attempt(sid, "B-001-001-001", true).unwrap();
+        db.record_attempt(sid, "B-002-001-001", false).unwrap();
+
+        let stats = db.all_question_stats().unwrap();
+
+        let q1 = stats.get("B-001-001-001").unwrap();
+        assert_eq!(q1.attempts, 3);
+        assert_eq!(q1.correct, 2);
+
+        let q2 = stats.get("B-002-001-001").unwrap();
+        assert_eq!(q2.attempts, 1);
+        assert_eq!(q2.correct, 0);
+    }
+
+    #[test]
+    fn all_question_stats_spans_sessions() {
+        let db = Db::open_in_memory().unwrap();
+        let s1 = db.start_session("quiz").unwrap();
+        db.record_attempt(s1, "B-001-001-001", true).unwrap();
+        let s2 = db.start_session("exam").unwrap();
+        db.record_attempt(s2, "B-001-001-001", false).unwrap();
+
+        let stats = db.all_question_stats().unwrap();
+        let q = stats.get("B-001-001-001").unwrap();
+        assert_eq!(q.attempts, 2);
+        assert_eq!(q.correct, 1);
     }
 
     #[test]

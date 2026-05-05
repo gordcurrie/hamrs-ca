@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
             modes::concept::run(&bank, &db).await?;
         }
         Command::Stats => {
-            print_stats(&db)?;
+            print_stats(&db, &bank)?;
         }
         Command::Bands => {
             modes::bands::run(&bank);
@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_stats(db: &Db) -> Result<()> {
+fn print_stats(db: &Db, bank: &QuestionBank) -> Result<()> {
     let sessions = db.recent_sessions(10)?;
 
     if sessions.is_empty() {
@@ -133,6 +133,147 @@ fn print_stats(db: &Db) -> Result<()> {
             "  {:<12} {:<8} {:<8} {:<7}% {}",
             mode, score, total, pct, result
         );
+    }
+
+    println!();
+    print_focus_areas(db, bank)?;
+    Ok(())
+}
+
+fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
+    use std::collections::HashMap;
+
+    let all_stats = db.all_question_stats()?;
+
+    // Aggregate attempts/correct per (section, subsection) across all questions
+    let mut by_section: HashMap<u8, HashMap<u8, (u32, u32)>> = HashMap::new();
+    let mut section_names: HashMap<u8, &'static str> = HashMap::new();
+
+    for q in bank.all() {
+        section_names
+            .entry(q.section)
+            .or_insert_with(|| q.section_name());
+        let entry = by_section
+            .entry(q.section)
+            .or_default()
+            .entry(q.subsection)
+            .or_insert((0, 0));
+        if let Some(qs) = all_stats.get(&q.id) {
+            entry.0 += qs.attempts;
+            entry.1 += qs.correct;
+        }
+    }
+
+    // Classify each section
+    struct SectionSummary {
+        num: u8,
+        name: &'static str,
+        needs_work: Vec<u8>,
+        improving: Vec<u8>,
+        not_started: Vec<u8>,
+        has_solid: bool,
+    }
+
+    let mut sections: Vec<SectionSummary> = by_section
+        .iter()
+        .map(|(&sec, sub_map)| {
+            let mut subs: Vec<u8> = sub_map.keys().cloned().collect();
+            subs.sort();
+
+            let mut needs_work = Vec::new();
+            let mut improving = Vec::new();
+            let mut not_started = Vec::new();
+            let mut has_solid = false;
+
+            for sub in &subs {
+                let (attempts, correct) = sub_map[sub];
+                if attempts == 0 {
+                    not_started.push(*sub);
+                } else {
+                    let ratio = correct as f32 / attempts as f32;
+                    if ratio < 0.6 {
+                        needs_work.push(*sub);
+                    } else if ratio < 0.9 {
+                        improving.push(*sub);
+                    } else {
+                        has_solid = true;
+                    }
+                }
+            }
+
+            SectionSummary {
+                num: sec,
+                name: section_names[&sec],
+                needs_work,
+                improving,
+                not_started,
+                has_solid,
+            }
+        })
+        .collect();
+
+    // Sort worst-first: by bucket, then by count of failing topics within bucket, then section number
+    sections.sort_by(|a, b| {
+        let bucket = |s: &SectionSummary| {
+            if !s.needs_work.is_empty() {
+                0u8
+            } else if !s.improving.is_empty() || !s.not_started.is_empty() {
+                1
+            } else {
+                2
+            }
+        };
+        let urgency =
+            |s: &SectionSummary| s.needs_work.len() + s.improving.len() + s.not_started.len();
+        bucket(a)
+            .cmp(&bucket(b))
+            .then(urgency(b).cmp(&urgency(a)))
+            .then(a.num.cmp(&b.num))
+    });
+
+    println!("  Focus Areas");
+    println!("  {}", "─".repeat(60));
+
+    for s in &sections {
+        let all_not_started = s.needs_work.is_empty() && s.improving.is_empty() && !s.has_solid;
+        let all_solid =
+            s.needs_work.is_empty() && s.improving.is_empty() && s.not_started.is_empty();
+
+        let symbol = if !s.needs_work.is_empty() {
+            "✗"
+        } else if all_solid {
+            "✓"
+        } else if all_not_started {
+            "-"
+        } else {
+            "~"
+        };
+
+        let detail = if all_solid {
+            String::new()
+        } else if all_not_started {
+            "(not started)".to_string()
+        } else {
+            let fmt = |v: &[u8]| {
+                v.iter()
+                    .map(|n| n.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let mut parts = Vec::new();
+            if !s.needs_work.is_empty() {
+                parts.push(format!("review: {}", fmt(&s.needs_work)));
+            }
+            if !s.improving.is_empty() {
+                parts.push(format!("practice: {}", fmt(&s.improving)));
+            }
+            if !s.not_started.is_empty() {
+                parts.push(format!("not started: {}", fmt(&s.not_started)));
+            }
+            parts.join("  |  ")
+        };
+
+        println!("  §{:<2} {:<32} {}  {}", s.num, s.name, symbol, detail);
     }
 
     println!();

@@ -98,7 +98,7 @@ hamrs quiz -s 5            # Practice section 5 only (Electrical Principles)
 hamrs quiz -s 5,6          # Practice sections 5 and 6
 hamrs quiz -s 5 -c 10      # 10 questions from section 5
 hamrs exam                 # Full 100-question timed exam (90 min)
-hamrs stats                # Recent session history
+hamrs stats                # Recent session history + focus areas by section/topic
 hamrs morse                # Morse code practice — prompts for all options
 hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 ```
@@ -108,7 +108,8 @@ hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 1. `hamrs concept` — read and understand a section before drilling it
 2. `hamrs quiz -s <N>` — drill a section under repetition pressure while it's fresh
 3. `hamrs quiz` — mixed practice across all sections as you progress
-4. `hamrs exam` — full timed simulation when you're ready to assess
+4. `hamrs stats` — see which sections and specific topics need the most attention
+5. `hamrs exam` — full timed simulation when you're ready to assess
 
 ### Quiz & Exam controls
 
@@ -215,6 +216,8 @@ Session history and per-question accuracy are stored in a local SQLite database:
 - **All platforms:** `~/.local/share/hamrs-ca/progress.db` (or `$XDG_DATA_HOME/hamrs-ca/progress.db` if set)
 
 The weighting algorithm surfaces questions you miss more often: answered correctly 90%+ → weight 1 (rare), never seen → weight 3, consistently missed → weight 4 (frequent).
+
+`hamrs stats` shows a Focus Areas summary after your session history — sections and specific subsection topics classified as needing review (< 60%), needing practice (60–&lt;90%), not started, or solid (≥ 90%), sorted by urgency.
 
 ---
 

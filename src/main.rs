@@ -140,40 +140,19 @@ fn print_stats(db: &Db, bank: &QuestionBank) -> Result<()> {
     Ok(())
 }
 
-fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
-    use std::collections::HashMap;
+struct SectionSummary {
+    num: u8,
+    name: &'static str,
+    needs_work: Vec<u8>,
+    improving: Vec<u8>,
+    not_started: Vec<u8>,
+    has_solid: bool,
+}
 
-    let all_stats = db.all_question_stats()?;
-
-    // Aggregate attempts/correct per (section, subsection) across all questions
-    let mut by_section: HashMap<u8, HashMap<u8, (u32, u32)>> = HashMap::new();
-    let mut section_names: HashMap<u8, &'static str> = HashMap::new();
-
-    for q in bank.all() {
-        section_names
-            .entry(q.section)
-            .or_insert_with(|| q.section_name());
-        let entry = by_section
-            .entry(q.section)
-            .or_default()
-            .entry(q.subsection)
-            .or_insert((0, 0));
-        if let Some(qs) = all_stats.get(&q.id) {
-            entry.0 += qs.attempts;
-            entry.1 += qs.correct;
-        }
-    }
-
-    // Classify each section
-    struct SectionSummary {
-        num: u8,
-        name: &'static str,
-        needs_work: Vec<u8>,
-        improving: Vec<u8>,
-        not_started: Vec<u8>,
-        has_solid: bool,
-    }
-
+fn classify_and_sort_sections(
+    by_section: &std::collections::HashMap<u8, std::collections::HashMap<u8, (u32, u32)>>,
+    section_names: &std::collections::HashMap<u8, &'static str>,
+) -> Vec<SectionSummary> {
     let mut sections: Vec<SectionSummary> = by_section
         .iter()
         .map(|(&sec, sub_map)| {
@@ -212,28 +191,65 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
         })
         .collect();
 
-    // Sort worst-first: by bucket, then by count of failing topics within bucket, then section number
+    // Sort: failing first, then in-progress, then not-started (by section number), then solid
     sections.sort_by(|a, b| {
         let bucket = |s: &SectionSummary| {
             if !s.needs_work.is_empty() {
                 0u8
-            } else if !s.improving.is_empty() || !s.not_started.is_empty() {
+            } else if !s.improving.is_empty() || (s.has_solid && !s.not_started.is_empty()) {
                 1
-            } else {
+            } else if !s.not_started.is_empty() {
                 2
+            } else {
+                3
             }
         };
-        let urgency =
-            |s: &SectionSummary| s.needs_work.len() + s.improving.len() + s.not_started.len();
+        let urgency = |s: &SectionSummary| {
+            if !s.has_solid && s.needs_work.is_empty() && s.improving.is_empty() {
+                0
+            } else {
+                s.needs_work.len() + s.improving.len() + s.not_started.len()
+            }
+        };
         bucket(a)
             .cmp(&bucket(b))
             .then(urgency(b).cmp(&urgency(a)))
             .then(a.num.cmp(&b.num))
     });
 
+    sections
+}
+
+fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
+    use std::collections::HashMap;
+
+    let all_stats = db.all_question_stats()?;
+
+    // Aggregate attempts/correct per (section, subsection) across all questions
+    let mut by_section: HashMap<u8, HashMap<u8, (u32, u32)>> = HashMap::new();
+    let mut section_names: HashMap<u8, &'static str> = HashMap::new();
+
+    for q in bank.all() {
+        section_names
+            .entry(q.section)
+            .or_insert_with(|| q.section_name());
+        let entry = by_section
+            .entry(q.section)
+            .or_default()
+            .entry(q.subsection)
+            .or_insert((0, 0));
+        if let Some(qs) = all_stats.get(&q.id) {
+            entry.0 += qs.attempts;
+            entry.1 += qs.correct;
+        }
+    }
+
+    let sections = classify_and_sort_sections(&by_section, &section_names);
+
     println!("  Focus Areas");
     println!("  {}", "─".repeat(60));
-    println!("  ✗ has failing topics (<60%)  ~ in progress  ✓ solid  - not started");
+    println!("  ✗ has failing topics  ~ in progress  ✓ solid  - not started");
+    println!("  topic labels — review: <60%  |  practice: 60–<90%");
     println!();
 
     for s in &sections {
@@ -280,4 +296,93 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
 
     println!();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_input(
+        data: &[(u8, u8, u32, u32)], // (section, subsection, attempts, correct)
+    ) -> (
+        HashMap<u8, HashMap<u8, (u32, u32)>>,
+        HashMap<u8, &'static str>,
+    ) {
+        let mut by_section: HashMap<u8, HashMap<u8, (u32, u32)>> = HashMap::new();
+        let mut names: HashMap<u8, &'static str> = HashMap::new();
+        for &(sec, sub, attempts, correct) in data {
+            names.entry(sec).or_insert("Section");
+            by_section
+                .entry(sec)
+                .or_default()
+                .insert(sub, (attempts, correct));
+        }
+        (by_section, names)
+    }
+
+    #[test]
+    fn classify_subsection_buckets() {
+        let (by_section, names) = make_input(&[
+            (1, 1, 0, 0),   // not started
+            (1, 2, 10, 3),  // <60% → needs_work
+            (1, 3, 10, 7),  // 60–90% → improving
+            (1, 4, 10, 10), // ≥90% → solid
+        ]);
+        let sections = classify_and_sort_sections(&by_section, &names);
+        assert_eq!(sections.len(), 1);
+        let s = &sections[0];
+        assert_eq!(s.not_started, vec![1]);
+        assert_eq!(s.needs_work, vec![2]);
+        assert_eq!(s.improving, vec![3]);
+        assert!(s.has_solid);
+    }
+
+    #[test]
+    fn sort_failing_before_improving_before_not_started_before_solid() {
+        let (by_section, names) = make_input(&[
+            (1, 1, 10, 10), // solid
+            (2, 1, 0, 0),   // not started
+            (3, 1, 10, 7),  // improving
+            (4, 1, 10, 3),  // failing
+        ]);
+        let sections = classify_and_sort_sections(&by_section, &names);
+        let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
+        assert_eq!(order, vec![4, 3, 2, 1]);
+    }
+
+    #[test]
+    fn sort_not_started_by_section_number() {
+        let (by_section, names) = make_input(&[(3, 1, 0, 0), (1, 1, 0, 0), (2, 1, 0, 0)]);
+        let sections = classify_and_sort_sections(&by_section, &names);
+        let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
+        assert_eq!(order, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn sort_failing_by_urgency_then_section_number() {
+        let (by_section, names) = make_input(&[
+            (1, 1, 10, 3), // 1 failing topic
+            (2, 1, 10, 3), // 1 failing topic — same urgency, lower section number wins
+            (3, 1, 10, 3), // 1 failing topic
+            (3, 2, 10, 3), // 2nd failing topic — §3 has more, should be first
+        ]);
+        let sections = classify_and_sort_sections(&by_section, &names);
+        let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
+        assert_eq!(order, vec![3, 1, 2]);
+    }
+
+    #[test]
+    fn mixed_solid_and_not_started_is_in_progress_not_all_not_started() {
+        let (by_section, names) = make_input(&[
+            (1, 1, 10, 10), // solid
+            (1, 2, 0, 0),   // not started
+        ]);
+        let sections = classify_and_sort_sections(&by_section, &names);
+        let s = &sections[0];
+        assert!(s.has_solid);
+        assert!(!s.not_started.is_empty());
+        assert!(s.needs_work.is_empty());
+        assert!(s.improving.is_empty());
+    }
 }

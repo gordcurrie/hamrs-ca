@@ -171,6 +171,7 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
         needs_work: Vec<u8>,
         improving: Vec<u8>,
         not_started: Vec<u8>,
+        has_solid: bool,
     }
 
     let mut sections: Vec<SectionSummary> = by_section
@@ -182,6 +183,7 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
             let mut needs_work = Vec::new();
             let mut improving = Vec::new();
             let mut not_started = Vec::new();
+            let mut has_solid = false;
 
             for sub in &subs {
                 let (attempts, correct) = sub_map[sub];
@@ -193,6 +195,8 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
                         needs_work.push(*sub);
                     } else if ratio < 0.9 {
                         improving.push(*sub);
+                    } else {
+                        has_solid = true;
                     }
                 }
             }
@@ -203,29 +207,35 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
                 needs_work,
                 improving,
                 not_started,
+                has_solid,
             }
         })
         .collect();
 
-    // Sort: sections with failing topics first, then partially started/improving, then solid
+    // Sort worst-first: by bucket, then by count of failing topics within bucket, then section number
     sections.sort_by(|a, b| {
-        let priority = |s: &SectionSummary| {
+        let bucket = |s: &SectionSummary| {
             if !s.needs_work.is_empty() {
-                0
+                0u8
             } else if !s.improving.is_empty() || !s.not_started.is_empty() {
                 1
             } else {
                 2
             }
         };
-        priority(a).cmp(&priority(b)).then(a.num.cmp(&b.num))
+        let urgency =
+            |s: &SectionSummary| s.needs_work.len() + s.improving.len() + s.not_started.len();
+        bucket(a)
+            .cmp(&bucket(b))
+            .then(urgency(b).cmp(&urgency(a)))
+            .then(a.num.cmp(&b.num))
     });
 
     println!("  Focus Areas");
     println!("  {}", "─".repeat(60));
 
     for s in &sections {
-        let all_not_started = s.needs_work.is_empty() && s.improving.is_empty();
+        let all_not_started = s.needs_work.is_empty() && s.improving.is_empty() && !s.has_solid;
         let all_solid =
             s.needs_work.is_empty() && s.improving.is_empty() && s.not_started.is_empty();
 

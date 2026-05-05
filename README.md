@@ -217,7 +217,7 @@ Session history and per-question accuracy are stored in a local SQLite database:
 
 The weighting algorithm surfaces questions you miss more often: answered correctly 90%+ → weight 1 (rare), never seen → weight 3, consistently missed → weight 4 (frequent).
 
-`hamrs stats` shows a Focus Areas summary after your session history — sections and specific subsection topics classified as needing review (< 60%), needing practice (60–90%), not started, or solid (≥ 90%), sorted by urgency.
+`hamrs stats` shows a Focus Areas summary after your session history — sections and specific subsection topics classified as needing review (< 60%), needing practice (60–&lt;90%), not started, or solid (≥ 90%), sorted by urgency.
 
 ---
 

@@ -233,7 +233,7 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
 
     println!("  Focus Areas");
     println!("  {}", "─".repeat(60));
-    println!("  ✗ review (<60%)  ~ practice (60–<90%)  ✓ solid (≥90%)  - not started");
+    println!("  ✗ has failing topics (<60%)  ~ in progress  ✓ solid  - not started");
     println!();
 
     for s in &sections {

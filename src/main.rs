@@ -149,7 +149,7 @@ struct SectionSummary {
     has_solid: bool,
 }
 
-fn classify_sections(
+fn classify_and_sort_sections(
     by_section: &std::collections::HashMap<u8, std::collections::HashMap<u8, (u32, u32)>>,
     section_names: &std::collections::HashMap<u8, &'static str>,
 ) -> Vec<SectionSummary> {
@@ -244,7 +244,7 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
         }
     }
 
-    let sections = classify_sections(&by_section, &section_names);
+    let sections = classify_and_sort_sections(&by_section, &section_names);
 
     println!("  Focus Areas");
     println!("  {}", "─".repeat(60));
@@ -329,7 +329,7 @@ mod tests {
             (1, 3, 10, 7),  // 60–90% → improving
             (1, 4, 10, 10), // ≥90% → solid
         ]);
-        let sections = classify_sections(&by_section, &names);
+        let sections = classify_and_sort_sections(&by_section, &names);
         assert_eq!(sections.len(), 1);
         let s = &sections[0];
         assert_eq!(s.not_started, vec![1]);
@@ -346,7 +346,7 @@ mod tests {
             (3, 1, 10, 7),  // improving
             (4, 1, 10, 3),  // failing
         ]);
-        let sections = classify_sections(&by_section, &names);
+        let sections = classify_and_sort_sections(&by_section, &names);
         let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
         assert_eq!(order, vec![4, 3, 2, 1]);
     }
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn sort_not_started_by_section_number() {
         let (by_section, names) = make_input(&[(3, 1, 0, 0), (1, 1, 0, 0), (2, 1, 0, 0)]);
-        let sections = classify_sections(&by_section, &names);
+        let sections = classify_and_sort_sections(&by_section, &names);
         let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
         assert_eq!(order, vec![1, 2, 3]);
     }
@@ -367,7 +367,7 @@ mod tests {
             (3, 1, 10, 3), // 1 failing topic
             (3, 2, 10, 3), // 2nd failing topic — §3 has more, should be first
         ]);
-        let sections = classify_sections(&by_section, &names);
+        let sections = classify_and_sort_sections(&by_section, &names);
         let order: Vec<u8> = sections.iter().map(|s| s.num).collect();
         assert_eq!(order, vec![3, 1, 2]);
     }
@@ -378,14 +378,11 @@ mod tests {
             (1, 1, 10, 10), // solid
             (1, 2, 0, 0),   // not started
         ]);
-        let sections = classify_sections(&by_section, &names);
+        let sections = classify_and_sort_sections(&by_section, &names);
         let s = &sections[0];
         assert!(s.has_solid);
         assert!(!s.not_started.is_empty());
         assert!(s.needs_work.is_empty());
         assert!(s.improving.is_empty());
-        // Should be in-progress bucket (~), not all-not-started (-)
-        // Verify: all_not_started condition requires !has_solid
-        assert!(s.has_solid); // confirms it won't render as "(not started)"
     }
 }

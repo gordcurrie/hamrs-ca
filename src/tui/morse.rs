@@ -630,6 +630,30 @@ mod tests {
     use super::*;
     use crate::modes::morse::{Charset, MorseConfig, MorseMode, MorseSession};
 
+    #[test]
+    fn element_timing_dit_not_last() {
+        let bytes = b".-";
+        let (tone, gap) = element_timing(bytes, 0, 100);
+        assert_eq!(tone, 100); // dit = 1 unit
+        assert_eq!(gap, 100); // inter-element gap present
+    }
+
+    #[test]
+    fn element_timing_dah_not_last() {
+        let bytes = b".-";
+        let (tone, gap) = element_timing(bytes, 1, 100);
+        assert_eq!(tone, 300); // dah = 3 units
+        assert_eq!(gap, 0); // last element — no trailing gap
+    }
+
+    #[test]
+    fn element_timing_single_element_no_gap() {
+        let bytes = b".";
+        let (tone, gap) = element_timing(bytes, 0, 50);
+        assert_eq!(tone, 50);
+        assert_eq!(gap, 0);
+    }
+
     fn app_with_times(times: Vec<u64>) -> App {
         let session = MorseSession::build(MorseConfig {
             mode: MorseMode::Transmit,

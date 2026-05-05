@@ -14,15 +14,17 @@ cargo fmt --check                  # format check (CI enforces this)
 cargo fmt                          # auto-format
 ```
 
-## Before opening a PR
+## After every code change
 
-Run all three CI checks and fix any failures before pushing:
+Always run all three CI checks before declaring work done or opening a PR:
 
 ```bash
 cargo fmt
 cargo clippy -- -D warnings
 cargo test
 ```
+
+Do not skip these steps — CI enforces all three and they must pass before pushing.
 
 ## Architecture
 

@@ -45,7 +45,7 @@ enum Command {
     Stats,
     /// Frequency band reference — log-scale spectrum chart with exam key facts
     Bands,
-    /// Morse code practice — receive (decode) and transmit (encode)
+    /// Morse code practice [experimental] — receive (decode) and transmit (encode)
     Morse {
         /// Practice mode
         #[arg(short, long)]

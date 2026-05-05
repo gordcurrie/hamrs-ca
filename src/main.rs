@@ -212,19 +212,26 @@ fn print_focus_areas(db: &Db, bank: &QuestionBank) -> Result<()> {
         })
         .collect();
 
-    // Sort worst-first: by bucket, then by count of failing topics within bucket, then section number
+    // Sort: failing first, then in-progress, then not-started (by section number), then solid
     sections.sort_by(|a, b| {
         let bucket = |s: &SectionSummary| {
             if !s.needs_work.is_empty() {
-                0u8
-            } else if !s.improving.is_empty() || !s.not_started.is_empty() {
-                1
+                0u8 // ✗ has failing topics
+            } else if !s.improving.is_empty() || (s.has_solid && !s.not_started.is_empty()) {
+                1 // ~ in progress
+            } else if !s.not_started.is_empty() {
+                2 // - fully not started
             } else {
-                2
+                3 // ✓ solid
             }
         };
-        let urgency =
-            |s: &SectionSummary| s.needs_work.len() + s.improving.len() + s.not_started.len();
+        let urgency = |s: &SectionSummary| {
+            if !s.has_solid && s.needs_work.is_empty() && s.improving.is_empty() {
+                0 // fully not started — fall through to section number ordering
+            } else {
+                s.needs_work.len() + s.improving.len() + s.not_started.len()
+            }
+        };
         bucket(a)
             .cmp(&bucket(b))
             .then(urgency(b).cmp(&urgency(a)))

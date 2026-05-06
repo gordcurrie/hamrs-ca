@@ -25,6 +25,8 @@ git push -u origin feat/<name>
 gh pr create
 ```
 
+When `gh pr merge` fails due to branch protection, report what is blocking it and wait for instruction. Never use `--admin` or any flag to bypass branch protection.
+
 ## After every code change
 
 Always run all three CI checks before declaring work done or opening a PR:

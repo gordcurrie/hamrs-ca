@@ -62,7 +62,7 @@ pub struct ShuffledQuestion {
 
 impl ShuffledQuestion {
     fn new(q: Question) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Build answer list with correct at index 0, then shuffle
         let mut indexed: Vec<(usize, String)> = vec![
@@ -121,7 +121,7 @@ fn weighted_sample(pool: Vec<&Question>, db: &Db, count: usize) -> anyhow::Resul
         .map(|s| (s.question_id.as_str(), s.weight()))
         .collect();
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // Build weighted index pool: each question repeated by its weight, then shuffle + dedup
     // This gives higher-weight questions a proportionally better chance of appearing early

@@ -403,7 +403,7 @@ fn build_initial_prompt(
 
 fn print_exam_questions(questions: &[&crate::questions::Question]) {
     use rand::seq::SliceRandom;
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let labels = ['A', 'B', 'C', 'D'];
 
     for (i, q) in questions.iter().enumerate() {

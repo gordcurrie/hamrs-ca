@@ -1,6 +1,6 @@
 use crate::morse;
 use anyhow::{bail, Result};
-use rand::seq::SliceRandom;
+use rand::prelude::IndexedRandom;
 use std::io::{self, BufRead, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq, clap::ValueEnum)]
@@ -47,7 +47,7 @@ impl MorseSession {
             .map(|(ch, code)| (*ch, *code))
             .collect();
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         // Clamp and keep config in sync so session.config.count == session.items.len()
         config.count = config.count.min(pool.len());
 

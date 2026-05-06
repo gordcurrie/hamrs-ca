@@ -8,6 +8,8 @@ pub struct Db {
     conn: Connection,
 }
 
+pub type SessionRow = (String, Option<String>, u32, u32);
+
 #[derive(Debug, Clone)]
 pub struct QuestionStats {
     pub question_id: String,
@@ -72,14 +74,24 @@ impl Db {
             );
         ",
         )?;
+        // Migration: add sections column to existing databases (ignored if already present)
+        let _ = self
+            .conn
+            .execute("ALTER TABLE sessions ADD COLUMN sections TEXT", []);
         Ok(())
     }
 
-    pub fn start_session(&self, mode: &str) -> Result<i64> {
+    pub fn start_session(&self, mode: &str, sections: Option<&[u8]>) -> Result<i64> {
         let now = unix_now();
+        let sections_str: Option<String> = sections.map(|s| {
+            s.iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        });
         self.conn.execute(
-            "INSERT INTO sessions (mode, started_at) VALUES (?1, ?2)",
-            params![mode, now],
+            "INSERT INTO sessions (mode, started_at, sections) VALUES (?1, ?2, ?3)",
+            params![mode, now, sections_str],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -196,9 +208,9 @@ impl Db {
         Ok(stats)
     }
 
-    pub fn recent_sessions(&self, limit: u32) -> Result<Vec<(String, u32, u32)>> {
+    pub fn recent_sessions(&self, limit: u32) -> Result<Vec<SessionRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT mode, score, total
+            "SELECT mode, sections, score, total
              FROM sessions
              WHERE finished_at IS NOT NULL
              ORDER BY started_at DESC
@@ -207,8 +219,9 @@ impl Db {
         let rows = stmt.query_map(params![limit], |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, u32>(1)?,
+                row.get::<_, Option<String>>(1)?,
                 row.get::<_, u32>(2)?,
+                row.get::<_, u32>(3)?,
             ))
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -374,7 +387,7 @@ mod tests {
     #[test]
     fn all_question_stats_aggregates_by_question() {
         let db = Db::open_in_memory().unwrap();
-        let sid = db.start_session("test").unwrap();
+        let sid = db.start_session("test", None).unwrap();
         db.record_attempt(sid, "B-001-001-001", true).unwrap();
         db.record_attempt(sid, "B-001-001-001", false).unwrap();
         db.record_attempt(sid, "B-001-001-001", true).unwrap();
@@ -394,9 +407,9 @@ mod tests {
     #[test]
     fn all_question_stats_spans_sessions() {
         let db = Db::open_in_memory().unwrap();
-        let s1 = db.start_session("quiz").unwrap();
+        let s1 = db.start_session("quiz", None).unwrap();
         db.record_attempt(s1, "B-001-001-001", true).unwrap();
-        let s2 = db.start_session("exam").unwrap();
+        let s2 = db.start_session("exam", None).unwrap();
         db.record_attempt(s2, "B-001-001-001", false).unwrap();
 
         let stats = db.all_question_stats().unwrap();

@@ -52,6 +52,7 @@ pub struct QuizSession {
     pub questions: Vec<ShuffledQuestion>,
     pub mode_label: &'static str,
     pub time_limit_secs: Option<u64>,
+    pub sections: Option<Vec<u8>>,
 }
 
 pub struct ShuffledQuestion {
@@ -100,6 +101,7 @@ pub fn build_practice_session(
         questions: questions.into_iter().map(ShuffledQuestion::new).collect(),
         mode_label: "Practice",
         time_limit_secs: None,
+        sections: sections.map(|s| s.to_vec()),
     })
 }
 
@@ -110,6 +112,7 @@ pub fn build_exam_session(bank: &QuestionBank, db: &Db) -> anyhow::Result<QuizSe
         questions: questions.into_iter().map(ShuffledQuestion::new).collect(),
         mode_label: "Full Exam",
         time_limit_secs: Some(90 * 60), // 90 minutes
+        sections: None,
     })
 }
 

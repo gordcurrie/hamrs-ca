@@ -113,12 +113,12 @@ fn print_stats(db: &Db, bank: &QuestionBank) -> Result<()> {
 
     println!();
     println!(
-        "  {:<12} {:<8} {:<8} {:<8} Result",
+        "  {:<18} {:<8} {:<8} {:<8} Result",
         "Mode", "Score", "Total", "Pct"
     );
-    println!("  {}", "─".repeat(52));
+    println!("  {}", "─".repeat(58));
 
-    for (mode, score, total) in &sessions {
+    for (mode, sections, score, total) in &sessions {
         let total = *total;
         let score = *score;
         let pct = (score * 100) / total.max(1);
@@ -129,9 +129,13 @@ fn print_stats(db: &Db, bank: &QuestionBank) -> Result<()> {
         } else {
             "✗ Below passing"
         };
+        let label = match sections.as_deref() {
+            Some(s) => format!("{} §{}", mode, s),
+            None => mode.clone(),
+        };
         println!(
-            "  {:<12} {:<8} {:<8} {:<7}% {}",
-            mode, score, total, pct, result
+            "  {:<18} {:<8} {:<8} {:<7}% {}",
+            label, score, total, pct, result
         );
     }
 

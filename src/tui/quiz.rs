@@ -144,7 +144,7 @@ impl App {
 }
 
 pub fn run(session: QuizSession, db: &Db) -> Result<()> {
-    let session_id = db.start_session(session.mode_label)?;
+    let session_id = db.start_session(session.mode_label, session.sections.as_deref())?;
     let mut app = App::new(session);
 
     enable_raw_mode()?;

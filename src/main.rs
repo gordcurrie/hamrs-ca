@@ -45,6 +45,8 @@ enum Command {
     Stats,
     /// Frequency band reference — log-scale spectrum chart with exam key facts
     Bands,
+    /// Flashcard drills for pure memorization — Q codes, RST, phonetics, bands
+    Drill,
     /// Morse code practice [experimental] — receive (decode) and transmit (encode)
     Morse {
         /// Practice mode
@@ -92,6 +94,11 @@ async fn main() -> Result<()> {
         }
         Command::Bands => {
             modes::bands::run(&bank);
+        }
+        Command::Drill => {
+            if let Some(session) = modes::drill::pick_session()? {
+                tui::drill::run(session)?;
+            }
         }
         Command::Morse { mode, wpm, count } => {
             if let Some(session) = modes::morse::setup(mode, wpm, count)? {

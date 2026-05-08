@@ -27,6 +27,18 @@ gh pr create
 
 When `gh pr merge` fails due to branch protection, report what is blocking it and wait for instruction. Never use `--admin` or any flag to bypass branch protection.
 
+After every merge, always sync local main:
+
+```bash
+git checkout main && git pull
+```
+
+When cutting a release, create and push a git tag:
+
+```bash
+git tag v<version> && git push origin v<version>
+```
+
 ## After every code change
 
 Always run all three CI checks before declaring work done or opening a PR:
@@ -57,8 +69,41 @@ The question bank is embedded via `include_str!`; the content map is embedded vi
 - **`src/ai/mod.rs`** — `ConceptClient` abstracts two backends: Anthropic API and Ollama. Anthropic takes priority when `anthropic_api_key` is set in the config file or via `$HAMRS_ANTHROPIC_API_KEY`. Falls back to Ollama at `http://localhost:11434`. Config file is written on first run (commented-out template, `chmod 600`). Config path resolves as: `$XDG_CONFIG_HOME/hamrs-ca/config.toml` → `~/.config/hamrs-ca/config.toml` → `.`.
 - **`src/modes/exam.rs`** — Builds `QuizSession` values. `weighted_sample` shuffles a weight-expanded index pool then deduplicates, giving higher-weight questions a proportionally better chance of appearing.
 - **`src/modes/concept.rs`** — Interactive learn mode. For each subsection key (e.g., `B-005-002`), it checks `get_pregenerated_content` first. If found, content is printed immediately with no API call; the pre-generated text is also injected as the assistant turn so follow-up questions have context. Falls back to a live AI call if no pre-generated content exists.
+- **`src/modes/drill.rs`** — Stateless flashcard drill mode. Static data arrays for Q codes, RST (R/S/T full scales), phonetic alphabet, and frequency bands (including sub-band restrictions and key restrictions). `pick_session()` is a stdin category picker that returns a shuffled `DrillSession`. No DB writes. Card generation is two-way (forward + reverse) for all categories; band cards also generate status and restriction cards from `DRILL_BANDS`.
 - **`src/tui/quiz.rs`** — ratatui + crossterm terminal UI for quiz and exam sessions.
+- **`src/tui/drill.rs`** — ratatui TUI for the flashcard loop. Three screens: `Prompting` (shows card front), `Revealed` (shows front + answer, waits for y/n), `Summary` (score + missed card Q+A list). Scopeguard is installed immediately after `enable_raw_mode()` — before `execute!` and `Terminal::new` — so cleanup runs on all error paths.
 - **`src/content.rs`** — includes the generated `content_map.rs` from `$OUT_DIR`.
+
+### Demo GIF recordings
+
+GIFs in `assets/` are generated with [VHS](https://github.com/charmbracelet/vhs) from `.tape` files in the repo root. VHS is installed at `/opt/homebrew/bin/vhs`.
+
+To regenerate or add a GIF:
+
+```bash
+cargo build --release          # binary must be at target/release/hamrs
+vhs demo-<name>.tape           # outputs to assets/demo-<name>.gif
+```
+
+Each tape sets `Env PATH "./target/release:..."` so it uses the local release binary. The pattern for a new tape:
+
+```
+Output assets/demo-<name>.gif
+
+Set FontSize 14
+Set Width 1200
+Set Height 700
+Set Theme "Dracula"
+Set TypingSpeed 80ms
+Set Shell "zsh"
+
+Env PATH "./target/release:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+Sleep 800ms
+# ... Type / Enter / Space / Down / Sleep commands ...
+```
+
+For TUI modes: use `Space` or `Enter` for key presses, `Type "x"` for character input. Add `Sleep` pauses long enough for the viewer to read each screen (1500–3500ms depending on content length). For stdin prompts before the TUI (category pickers, section pickers), `Type` + `Enter` work the same way.
 
 ### Pre-generated concept content
 
@@ -66,7 +111,7 @@ Files in `content/` are named by subsection key (e.g., `content/B-005-002.md`) a
 
 ### UX mode split
 
-Concept mode (`hamrs concept`) uses plain `stdin.read_line()` throughout — no ratatui. Quiz and exam modes use the ratatui TUI for the question screen, but the section-picker prompt in `modes/exam::pick_sections()` also uses plain `stdin.read_line()` before the TUI starts. Both I/O paths need to stay correct when touching input handling.
+Concept mode (`hamrs concept`) uses plain `stdin.read_line()` throughout — no ratatui. Quiz and exam modes use the ratatui TUI for the question screen, but the section-picker prompt in `modes/exam::pick_sections()` also uses plain `stdin.read_line()` before the TUI starts. Drill mode follows the same split: `modes/drill::pick_session()` uses plain stdin, then hands off to `tui/drill::run()` for the flashcard loop. All three stdin pickers need to stay correct when touching input handling.
 
 ### Code conventions
 

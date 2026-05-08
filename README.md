@@ -18,6 +18,16 @@ Built for people who want to actually understand the RF engineering — not just
 - Related exam questions shown after each explanation with correct answers marked
 - Follow-up questions supported — it's a conversation, not a page
 
+**Flashcard Drill**
+
+![drill mode demo](assets/demo-drill.gif)
+
+- `drill` — focused memorization for pure recall material: Q codes, RST signal reports, phonetic alphabet, frequency bands
+- Select a category, then flip through shuffled cards: read the prompt, reveal the answer, mark correct or missed
+- Two-way cards throughout — drills both directions (e.g. code→meaning *and* meaning→code)
+- Session ends with a score and a full list of missed cards (prompt + answer) so you know exactly what to re-drill
+- Band cards cover frequency range, Primary/Secondary status, sub-band restrictions, and key exam facts
+
 **Frequency Band Reference**
 
 ![bands command demo](assets/demo-bands.gif)
@@ -92,6 +102,7 @@ The question bank (984 questions from the ISED public-domain database) is compil
 
 ```bash
 hamrs concept              # Learn any section with AI explanations — start here
+hamrs drill                # Flashcard drill — category picker then ratatui flashcard loop
 hamrs bands                # Frequency band reference — log-scale spectrum chart with exam key facts
 hamrs quiz                 # Weighted practice quiz, with interactive section picker
 hamrs quiz -s 5            # Practice section 5 only (Electrical Principles)
@@ -106,10 +117,11 @@ hamrs morse --mode receive --wpm 13  # Skip prompts: receive at 13 WPM
 ### Recommended study flow
 
 1. `hamrs concept` — read and understand a section before drilling it
-2. `hamrs quiz -s <N>` — drill a section under repetition pressure while it's fresh
-3. `hamrs quiz` — mixed practice across all sections as you progress
-4. `hamrs stats` — see which sections and specific topics need the most attention
-5. `hamrs exam` — full timed simulation when you're ready to assess
+2. `hamrs drill` — lock in pure recall material (Q codes, RST, phonetics, bands) before quizzing
+3. `hamrs quiz -s <N>` — drill a section under repetition pressure while it's fresh
+4. `hamrs quiz` — mixed practice across all sections as you progress
+5. `hamrs stats` — see which sections and specific topics need the most attention
+6. `hamrs exam` — full timed simulation when you're ready to assess
 
 ### Quiz & Exam controls
 

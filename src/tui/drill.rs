@@ -208,7 +208,9 @@ fn render_card(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &Ap
 
 fn render_summary(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App) {
     let attempted = app.correct as usize + app.missed_indices.len();
-    let pct = (app.correct as usize * 100).checked_div(attempted).unwrap_or(0);
+    let pct = (app.correct as usize * 100)
+        .checked_div(attempted)
+        .unwrap_or(0);
 
     let (pct_color, pct_badge) = if pct >= 80 {
         (Color::Green, "\u{2605}")

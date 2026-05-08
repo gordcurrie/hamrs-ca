@@ -570,6 +570,7 @@ pub fn pick_session() -> anyhow::Result<Option<DrillSession>> {
         .sum();
     println!("    [b]  Frequency Bands    ({band_count} cards)");
     println!();
+    println!("  (Press Enter to quit)");
 
     let stdin = io::stdin();
     let mut lock = stdin.lock();

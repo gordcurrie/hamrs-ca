@@ -94,16 +94,80 @@ static S_SCALE: &[SValue] = &[
         meaning: "Faintly perceptible",
     },
     SValue {
+        value: 2,
+        meaning: "Very weak",
+    },
+    SValue {
+        value: 3,
+        meaning: "Weak",
+    },
+    SValue {
+        value: 4,
+        meaning: "Fair",
+    },
+    SValue {
         value: 5,
-        meaning: "Fairly good strength",
+        meaning: "Fairly good",
+    },
+    SValue {
+        value: 6,
+        meaning: "Good",
     },
     SValue {
         value: 7,
         meaning: "Moderately strong",
     },
     SValue {
+        value: 8,
+        meaning: "Strong",
+    },
+    SValue {
         value: 9,
         meaning: "Extremely strong",
+    },
+];
+
+struct TValue {
+    value: u8,
+    meaning: &'static str,
+}
+
+static T_SCALE: &[TValue] = &[
+    TValue {
+        value: 1,
+        meaning: "Extremely rough hissing note",
+    },
+    TValue {
+        value: 2,
+        meaning: "Very rough AC note, no trace of musicality",
+    },
+    TValue {
+        value: 3,
+        meaning: "Rough, low-pitched AC note, slightly musical",
+    },
+    TValue {
+        value: 4,
+        meaning: "Rather rough AC note, moderately musical",
+    },
+    TValue {
+        value: 5,
+        meaning: "Musically modulated note",
+    },
+    TValue {
+        value: 6,
+        meaning: "Modulated note, slight trace of whistle",
+    },
+    TValue {
+        value: 7,
+        meaning: "Near DC note, smooth ripple",
+    },
+    TValue {
+        value: 8,
+        meaning: "Good DC note, just a trace of ripple",
+    },
+    TValue {
+        value: 9,
+        meaning: "Perfect DC note, no trace of ripple",
     },
 ];
 
@@ -412,6 +476,16 @@ fn rst_cards() -> Vec<Flashcard> {
             answer: format!("S{}", s.value),
         });
     }
+    for t in T_SCALE {
+        cards.push(Flashcard {
+            prompt: format!("What does Tone {} (T{}) mean in CW?", t.value, t.value),
+            answer: t.meaning.to_string(),
+        });
+        cards.push(Flashcard {
+            prompt: format!("Which Tone value means \"{}\"?", t.meaning),
+            answer: format!("T{}", t.value),
+        });
+    }
     for (prompt, answer) in RST_FACTS {
         cards.push(Flashcard {
             prompt: prompt.to_string(),
@@ -484,7 +558,7 @@ pub fn pick_session() -> anyhow::Result<Option<DrillSession>> {
     println!("    [q]  Q Codes           ({} cards)", Q_CODES.len() * 2);
     println!(
         "    [r]  RST Signal Reports ({} cards)",
-        R_SCALE.len() * 2 + S_SCALE.len() * 2 + RST_FACTS.len()
+        R_SCALE.len() * 2 + S_SCALE.len() * 2 + T_SCALE.len() * 2 + RST_FACTS.len()
     );
     println!(
         "    [p]  Phonetic Alphabet  ({} cards)",
@@ -520,5 +594,101 @@ pub fn pick_session() -> anyhow::Result<Option<DrillSession>> {
         };
         cards.shuffle(&mut rand::rng());
         return Ok(Some(DrillSession { label, cards }));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_non_empty(cards: &[Flashcard]) {
+        for (i, card) in cards.iter().enumerate() {
+            assert!(!card.prompt.is_empty(), "card {i} has empty prompt");
+            assert!(!card.answer.is_empty(), "card {i} has empty answer");
+        }
+    }
+
+    #[test]
+    fn q_code_card_count_is_double_entries() {
+        let cards = q_code_cards();
+        assert_eq!(cards.len(), Q_CODES.len() * 2);
+        all_non_empty(&cards);
+    }
+
+    #[test]
+    fn q_code_cards_are_bidirectional() {
+        let cards = q_code_cards();
+        // Forward cards contain the code in the prompt; reverse cards contain it in the answer.
+        let forward_prompts: Vec<_> = cards.iter().filter(|c| c.prompt.contains("QRL")).collect();
+        let reverse_answers: Vec<_> = cards.iter().filter(|c| c.answer.contains("QRL")).collect();
+        assert!(!forward_prompts.is_empty(), "missing forward QRL card");
+        assert!(!reverse_answers.is_empty(), "missing reverse QRL card");
+    }
+
+    #[test]
+    fn rst_card_count_matches_scale_sizes() {
+        let cards = rst_cards();
+        let expected = R_SCALE.len() * 2 + S_SCALE.len() * 2 + T_SCALE.len() * 2 + RST_FACTS.len();
+        assert_eq!(cards.len(), expected);
+        all_non_empty(&cards);
+    }
+
+    #[test]
+    fn rst_cards_cover_full_r_scale() {
+        let cards = rst_cards();
+        for r in R_SCALE {
+            let tag = format!("R{}", r.value);
+            let has_forward = cards.iter().any(|c| c.answer == r.meaning);
+            let has_reverse = cards.iter().any(|c| c.answer == tag);
+            assert!(has_forward, "missing forward card for R{}", r.value);
+            assert!(has_reverse, "missing reverse card for R{}", r.value);
+        }
+    }
+
+    #[test]
+    fn phonetic_card_count_is_double_alphabet() {
+        let cards = phonetic_cards();
+        assert_eq!(cards.len(), PHONETICS.len() * 2);
+        all_non_empty(&cards);
+    }
+
+    #[test]
+    fn phonetic_cards_are_bidirectional() {
+        let cards = phonetic_cards();
+        let forward = cards.iter().find(|c| c.answer == "Alfa");
+        let reverse = cards.iter().find(|c| c.answer == "A");
+        assert!(forward.is_some(), "missing forward card for Alfa");
+        assert!(reverse.is_some(), "missing reverse card for A");
+    }
+
+    #[test]
+    fn band_card_count_matches_data() {
+        let cards = band_cards();
+        let expected: usize = DRILL_BANDS
+            .iter()
+            .map(|b| 3 + b.sub_band.is_some() as usize + b.key_restriction.is_some() as usize)
+            .sum();
+        assert_eq!(cards.len(), expected);
+        all_non_empty(&cards);
+    }
+
+    #[test]
+    fn band_cards_include_sub_band_restriction() {
+        let cards = band_cards();
+        // 40m has a sub-band entry
+        let has_sub = cards
+            .iter()
+            .any(|c| c.prompt.contains("40m") && c.prompt.contains("sub-band"));
+        assert!(has_sub, "missing 40m sub-band card");
+    }
+
+    #[test]
+    fn band_cards_include_key_restriction() {
+        let cards = band_cards();
+        // 30m has CW-only restriction
+        let has_fact = cards
+            .iter()
+            .any(|c| c.answer.contains("CW and digital only"));
+        assert!(has_fact, "missing 30m key restriction card");
     }
 }

@@ -102,15 +102,16 @@ pub fn run(session: DrillSession) -> Result<()> {
     let mut app = App::new(session);
 
     enable_raw_mode()?;
-    let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-
+    // Guard installed immediately after enable_raw_mode so cleanup runs on all error paths,
+    // including failures from execute! or Terminal::new below.
     let _guard = scopeguard::guard((), |_| {
         let _ = disable_raw_mode();
         let _ = execute!(std::io::stdout(), LeaveAlternateScreen, Show);
     });
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
 
     loop {
         terminal.draw(|frame| render(frame, &app))?;
